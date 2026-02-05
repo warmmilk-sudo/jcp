@@ -2,6 +2,7 @@ package adk
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/run-bigpig/jcp/internal/adk/mcp"
@@ -150,31 +151,113 @@ func (b *ExpertAgentBuilder) buildInstructionWithContext(config *models.AgentCon
 
 // buildToolsDescription 构建可用工具说明
 func (b *ExpertAgentBuilder) buildToolsDescription(config *models.AgentConfig) string {
-	var toolDescriptions []string
+	var searchTools []string    // 搜索类工具
+	var dataTools []string      // 数据查询工具
+	var otherTools []string     // 其他工具
 
-	// 获取内置工具信息
+	// 搜索类工具关键词
+	searchKeywords := []string{"search", "搜索", "web", "网页", "tavily", "google", "bing"}
+
+	// 获取内置工具信息并分类
 	if b.toolRegistry != nil && len(config.Tools) > 0 {
 		toolInfos := b.toolRegistry.GetToolInfosByNames(config.Tools)
 		for _, info := range toolInfos {
-			toolDescriptions = append(toolDescriptions, fmt.Sprintf("- %s: %s", info.Name, info.Description))
+			desc := fmt.Sprintf("- %s: %s", info.Name, info.Description)
+			if b.isSearchTool(info.Name, info.Description, searchKeywords) {
+				searchTools = append(searchTools, desc)
+			} else if b.isDataTool(info.Name) {
+				dataTools = append(dataTools, desc)
+			} else {
+				otherTools = append(otherTools, desc)
+			}
 		}
 	}
 
-	// 获取 MCP 工具信息
+	// 获取 MCP 工具信息并分类
 	if b.mcpManager != nil && len(config.MCPServers) > 0 {
 		mcpTools := b.mcpManager.GetToolInfosByServerIDs(config.MCPServers)
 		for _, info := range mcpTools {
-			toolDescriptions = append(toolDescriptions, fmt.Sprintf("- %s: %s (来自 %s)", info.Name, info.Description, info.ServerName))
+			desc := fmt.Sprintf("- %s: %s (来自 %s)", info.Name, info.Description, info.ServerName)
+			if b.isSearchTool(info.Name, info.Description, searchKeywords) {
+				searchTools = append(searchTools, desc)
+			} else if b.isDataTool(info.Name) {
+				dataTools = append(dataTools, desc)
+			} else {
+				otherTools = append(otherTools, desc)
+			}
 		}
 	}
 
-	if len(toolDescriptions) == 0 {
+	if len(searchTools) == 0 && len(dataTools) == 0 && len(otherTools) == 0 {
 		return ""
 	}
 
-	result := "\n可用工具:\n"
-	for _, desc := range toolDescriptions {
-		result += desc + "\n"
+	return b.formatToolsInstruction(searchTools, dataTools, otherTools)
+}
+
+// isSearchTool 判断是否为搜索类工具
+func (b *ExpertAgentBuilder) isSearchTool(name, description string, keywords []string) bool {
+	nameLower := strings.ToLower(name)
+	descLower := strings.ToLower(description)
+	for _, kw := range keywords {
+		if strings.Contains(nameLower, kw) || strings.Contains(descLower, kw) {
+			return true
+		}
 	}
-	return result
+	return false
+}
+
+// isDataTool 判断是否为数据查询工具
+func (b *ExpertAgentBuilder) isDataTool(name string) bool {
+	dataKeywords := []string{"kline", "k线", "realtime", "实时", "orderbook", "盘口", "news", "新闻"}
+	nameLower := strings.ToLower(name)
+	for _, kw := range dataKeywords {
+		if strings.Contains(nameLower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// formatToolsInstruction 格式化工具使用指导
+func (b *ExpertAgentBuilder) formatToolsInstruction(searchTools, dataTools, otherTools []string) string {
+	var result strings.Builder
+
+	result.WriteString("\n## 工具使用规则（必须遵守）\n\n")
+
+	// 搜索工具 - 强制使用
+	if len(searchTools) > 0 {
+		result.WriteString("### 搜索工具（遇到信息查询必须调用）\n")
+		for _, t := range searchTools {
+			result.WriteString(t + "\n")
+		}
+		result.WriteString("\n**重要**: 当用户询问新闻、事件、公告、研报、市场动态等信息时，")
+		result.WriteString("你**必须先调用搜索工具**获取最新信息，**禁止凭记忆回答**。\n\n")
+	}
+
+	// 数据工具
+	if len(dataTools) > 0 {
+		result.WriteString("### 数据查询工具\n")
+		for _, t := range dataTools {
+			result.WriteString(t + "\n")
+		}
+		result.WriteString("\n")
+	}
+
+	// 其他工具
+	if len(otherTools) > 0 {
+		result.WriteString("### 其他工具\n")
+		for _, t := range otherTools {
+			result.WriteString(t + "\n")
+		}
+		result.WriteString("\n")
+	}
+
+	// 通用指导
+	result.WriteString("### 工具调用原则\n")
+	result.WriteString("1. 需要实时数据时，必须调用工具，不要编造数据\n")
+	result.WriteString("2. 搜索类工具优先用于获取最新信息\n")
+	result.WriteString("3. 工具返回结果后再组织回答\n")
+
+	return result.String()
 }

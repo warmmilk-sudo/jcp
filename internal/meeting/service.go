@@ -28,7 +28,7 @@ var log = logger.New("Meeting")
 const (
 	MeetingTimeout       = 5 * time.Minute  // 整个会议的最大时长
 	AgentTimeout         = 90 * time.Second // 单个专家发言的最大时长
-	ModeratorTimeout     = 30 * time.Second // 小韭菜分析/总结的最大时长
+	ModeratorTimeout     = 60 * time.Second // 小韭菜分析/总结的最大时长
 	ModelCreationTimeout = 10 * time.Second // 模型创建的最大时长
 )
 

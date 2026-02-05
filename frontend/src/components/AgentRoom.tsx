@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Stock, KLineData } from '../types';
 import { getAgentConfigs, AgentConfig } from '../services/agentConfigService';
 import { StockSession, ChatMessage, sendMeetingMessage, MeetingMessageRequest, getSessionMessages } from '../services/sessionService';
-import { MessageSquare, Loader2, Send, User, Users, X, Reply, Trash2, Wrench, CheckCircle2, AlertCircle } from 'lucide-react';
+import { MessageSquare, Loader2, Send, User, Users, X, Reply, Trash2, Wrench, CheckCircle2, AlertCircle, Copy, Check, RotateCcw, Pencil } from 'lucide-react';
 import { clearSessionMessages } from '../services/sessionService';
 import { NodeRenderer } from 'markstream-react';
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime';
@@ -72,6 +72,8 @@ export const AgentRoom: React.FC<AgentRoomProps> = ({ session, onSessionUpdate }
   // 其他状态
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [failedUserMsgId, setFailedUserMsgId] = useState<string | null>(null);
 
   // 进度状态
   const [progress, setProgress] = useState<ProgressState>({
@@ -250,6 +252,8 @@ export const AgentRoom: React.FC<AgentRoomProps> = ({ session, onSessionUpdate }
         }
       }
       showToast(errorMsg, 'error');
+      // 超时或失败时记录用户消息ID，显示重试/编辑按钮
+      setFailedUserMsgId(userMsg.id);
     } finally {
       setSimulatingMap(prev => ({ ...prev, [stockCode]: false }));
     }
@@ -311,6 +315,30 @@ export const AgentRoom: React.FC<AgentRoomProps> = ({ session, onSessionUpdate }
   // 取消引用
   const clearReplyTo = () => {
     setReplyToMessage(null);
+  };
+
+  // 复制消息内容
+  const handleCopy = async (msgId: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedId(msgId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      showToast('复制失败', 'error');
+    }
+  };
+
+  // 重试发送消息
+  const handleRetry = (msg: ChatMessage) => {
+    setFailedUserMsgId(null);
+    handleSendMessage(msg.content, msg.mentions || [], null);
+  };
+
+  // 编辑消息
+  const handleEdit = (msg: ChatMessage) => {
+    setUserQuery(msg.content);
+    setFailedUserMsgId(null);
+    inputRef.current?.focus();
   };
 
   // 显示清空确认弹窗
@@ -409,6 +437,25 @@ export const AgentRoom: React.FC<AgentRoomProps> = ({ session, onSessionUpdate }
                     <div className="inline-block text-left text-sm text-white bg-gradient-to-br from-sky-500 to-cyan-500 p-3 rounded-2xl rounded-tr-none shadow-sm">
                       {msg.content}
                     </div>
+                    {/* 失败时显示重试/编辑按钮 */}
+                    {failedUserMsgId === msg.id && (
+                      <div className="flex items-center gap-2 mt-2 justify-end">
+                        <button
+                          onClick={() => handleRetry(msg)}
+                          className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded transition-colors"
+                        >
+                          <RotateCcw size={12} />
+                          重试
+                        </button>
+                        <button
+                          onClick={() => handleEdit(msg)}
+                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300 bg-slate-500/10 hover:bg-slate-500/20 px-2 py-1 rounded transition-colors"
+                        >
+                          <Pencil size={12} />
+                          编辑
+                        </button>
+                      </div>
+                    )}
                  </div>
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-slate-900/60 text-cyan-300 border border-cyan-500/30">
                     <User size={16}/>
@@ -423,7 +470,7 @@ export const AgentRoom: React.FC<AgentRoomProps> = ({ session, onSessionUpdate }
             const isOpening = msg.msgType === 'opening';
             const isSummary = msg.msgType === 'summary';
             return (
-              <div key={msg.id} className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div key={msg.id} className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 group">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-md ring-2 ring-slate-900">
                   <Users size={14} />
                 </div>
@@ -434,12 +481,22 @@ export const AgentRoom: React.FC<AgentRoomProps> = ({ session, onSessionUpdate }
                       {isOpening ? '开场' : isSummary ? '总结' : msg.role}
                     </span>
                   </div>
-                  <div className={`text-sm p-3 rounded-2xl rounded-tl-none leading-relaxed shadow-sm ${
-                    isSummary
-                      ? 'bg-gradient-to-br from-amber-900/40 to-orange-900/30 border border-amber-500/30 text-amber-100'
-                      : 'bg-slate-800/70 border border-amber-500/20 text-slate-200'
-                  }`}>
-                    <NodeRenderer content={msg.content} />
+                  <div className="relative">
+                    <div className={`text-sm p-3 rounded-2xl rounded-tl-none leading-relaxed shadow-sm ${
+                      isSummary
+                        ? 'bg-gradient-to-br from-amber-900/40 to-orange-900/30 border border-amber-500/30 text-amber-100'
+                        : 'bg-slate-800/70 border border-amber-500/20 text-slate-200'
+                    }`}>
+                      <NodeRenderer content={msg.content} />
+                    </div>
+                    {/* 复制按钮 */}
+                    <button
+                      onClick={() => handleCopy(msg.id, msg.content)}
+                      className="absolute -right-2 top-1 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-700 hover:bg-slate-600 text-slate-300 p-1.5 rounded-full shadow-lg"
+                      title="复制"
+                    >
+                      {copiedId === msg.id ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -463,15 +520,24 @@ export const AgentRoom: React.FC<AgentRoomProps> = ({ session, onSessionUpdate }
                   <div className="text-sm text-slate-200 bg-slate-800/70 p-3 rounded-2xl rounded-tl-none border border-slate-700/40 leading-relaxed shadow-sm agent-message-content">
                     <NodeRenderer content={msg.content} />
                   </div>
-                  {/* 引用回复按钮 */}
-                  <button
-                    onClick={() => handleReplyTo(msg)}
-                    disabled={isSimulating}
-                    className="absolute -right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-700 hover:bg-slate-600 text-slate-300 p-1.5 rounded-full shadow-lg disabled:opacity-0"
-                    title="引用回复"
-                  >
-                    <Reply size={12} />
-                  </button>
+                  {/* 操作按钮组 */}
+                  <div className="absolute -right-2 top-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleCopy(msg.id, msg.content)}
+                      className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-1.5 rounded-full shadow-lg"
+                      title="复制"
+                    >
+                      {copiedId === msg.id ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                    </button>
+                    <button
+                      onClick={() => handleReplyTo(msg)}
+                      disabled={isSimulating}
+                      className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-1.5 rounded-full shadow-lg disabled:opacity-50"
+                      title="引用回复"
+                    >
+                      <Reply size={12} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
