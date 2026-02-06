@@ -1,7 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { EventsOn, EventsOff, EventsEmit } from '@wailsjs/runtime/runtime';
-import { Stock, OrderBook, Telegraph, MarketIndex } from '../types';
-import { services } from '@wailsjs/go/models';
+import { Stock, OrderBook, Telegraph, MarketIndex, MarketStatus } from '../types';
 
 // 事件名称常量，与后端保持一致
 const EVENT_STOCK_UPDATE = 'market:stock:update';
@@ -16,7 +15,7 @@ interface UseMarketEventsOptions {
   onStockUpdate?: (stocks: Stock[]) => void;
   onOrderBookUpdate?: (orderBook: OrderBook) => void;
   onTelegraphUpdate?: (telegraph: Telegraph) => void;
-  onMarketStatusUpdate?: (status: services.MarketStatus) => void;
+  onMarketStatusUpdate?: (status: MarketStatus) => void;
   onMarketIndicesUpdate?: (indices: MarketIndex[]) => void;
 }
 
@@ -61,7 +60,7 @@ export function useMarketEvents(options: UseMarketEventsOptions) {
     });
 
     // 监听市场状态更新
-    EventsOn(EVENT_MARKET_STATUS_UPDATE, (status: services.MarketStatus) => {
+    EventsOn(EVENT_MARKET_STATUS_UPDATE, (status: MarketStatus) => {
       marketStatusCallbackRef.current?.(status);
     });
 

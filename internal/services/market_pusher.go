@@ -12,13 +12,13 @@ import (
 
 // 事件名称常量
 const (
-	EventStockUpdate        = "market:stock:update"
-	EventOrderBookUpdate    = "market:orderbook:update"
-	EventTelegraphUpdate    = "market:telegraph:update"
-	EventMarketStatusUpdate = "market:status:update"
+	EventStockUpdate         = "market:stock:update"
+	EventOrderBookUpdate     = "market:orderbook:update"
+	EventTelegraphUpdate     = "market:telegraph:update"
+	EventMarketStatusUpdate  = "market:status:update"
 	EventMarketIndicesUpdate = "market:indices:update"
-	EventMarketSubscribe    = "market:subscribe"
-	EventOrderBookSubscribe = "market:orderbook:subscribe"
+	EventMarketSubscribe     = "market:subscribe"
+	EventOrderBookSubscribe  = "market:orderbook:subscribe"
 )
 
 // MarketDataPusher 市场数据推送服务
@@ -137,7 +137,7 @@ func (p *MarketDataPusher) pushLoop() {
 	// 快讯数据推送间隔：30秒
 	telegraphTicker := time.NewTicker(30 * time.Second)
 	// 市场状态推送间隔：60秒
-	marketStatusTicker := time.NewTicker(60 * time.Second)
+	marketStatusTicker := time.NewTicker(5 * time.Second)
 	// 大盘指数推送间隔：3秒
 	marketIndicesTicker := time.NewTicker(3 * time.Second)
 

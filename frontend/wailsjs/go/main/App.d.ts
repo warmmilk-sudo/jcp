@@ -45,10 +45,6 @@ export function GetMCPServers():Promise<Array<models.MCPServerConfig>>;
 
 export function GetMCPStatus():Promise<Array<mcp.ServerStatus>>;
 
-export function GetMarketIndices():Promise<Array<models.MarketIndex>>;
-
-export function GetMarketStatus():Promise<services.MarketStatus>;
-
 export function GetOrCreateSession(arg1:string,arg2:string):Promise<models.StockSession>;
 
 export function GetOrderBook(arg1:string):Promise<models.OrderBook>;

@@ -12,12 +12,11 @@ import { getWatchlist, addToWatchlist, removeFromWatchlist } from './services/wa
 import { getKLineData, getOrderBook } from './services/stockService';
 import { getOrCreateSession, StockSession, updateStockPosition } from './services/sessionService';
 import { useMarketEvents } from './hooks/useMarketEvents';
-import { Stock, KLineData, OrderBook, TimePeriod, Telegraph, MarketIndex } from './types';
+import { Stock, KLineData, OrderBook, TimePeriod, Telegraph, MarketIndex, MarketStatus } from './types';
 import { Radio, Settings, List, Minus, Square, X, Copy, Briefcase, TrendingUp } from 'lucide-react';
 import logo from './assets/images/logo.png';
 import { GetTelegraphList, OpenURL, WindowMinimize, WindowMaximize, WindowClose } from '../wailsjs/go/main/App';
 import { WindowIsMaximised } from '../wailsjs/runtime/runtime';
-import { services } from '../wailsjs/go/models';
 
 const App: React.FC = () => {
   const [watchlist, setWatchlist] = useState<Stock[]>([]);
@@ -34,7 +33,7 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showPosition, setShowPosition] = useState(false);
   const [showHotTrend, setShowHotTrend] = useState(false);
-  const [marketStatus, setMarketStatus] = useState<services.MarketStatus | null>(null);
+  const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
   const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -67,7 +66,7 @@ const App: React.FC = () => {
   }, []);
 
   // 处理市场状态更新（来自后端推送）
-  const handleMarketStatusUpdate = useCallback((status: services.MarketStatus) => {
+  const handleMarketStatusUpdate = useCallback((status: MarketStatus) => {
     if (status) {
       setMarketStatus(status);
     }

@@ -112,3 +112,11 @@ export interface MarketIndex {
   volume: number;        // 成交量(手)
   amount: number;        // 成交额(万元)
 }
+
+// 市场状态
+export interface MarketStatus {
+  status: string;        // trading, closed, pre_market, lunch_break
+  statusText: string;    // 中文状态描述
+  isTradeDay: boolean;   // 是否交易日
+  holidayName: string;   // 节假日名称
+}

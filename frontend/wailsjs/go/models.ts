@@ -369,30 +369,6 @@ export namespace models {
 	    }
 	}
 	
-	export class MarketIndex {
-	    code: string;
-	    name: string;
-	    price: number;
-	    change: number;
-	    changePercent: number;
-	    volume: number;
-	    amount: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new MarketIndex(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.code = source["code"];
-	        this.name = source["name"];
-	        this.price = source["price"];
-	        this.change = source["change"];
-	        this.changePercent = source["changePercent"];
-	        this.volume = source["volume"];
-	        this.amount = source["amount"];
-	    }
-	}
 	
 	export class OrderBookItem {
 	    price: number;
@@ -542,24 +518,6 @@ export namespace models {
 
 export namespace services {
 	
-	export class MarketStatus {
-	    status: string;
-	    statusText: string;
-	    isTradeDay: boolean;
-	    holidayName: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new MarketStatus(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.status = source["status"];
-	        this.statusText = source["statusText"];
-	        this.isTradeDay = source["isTradeDay"];
-	        this.holidayName = source["holidayName"];
-	    }
-	}
 	export class StockSearchResult {
 	    symbol: string;
 	    name: string;
