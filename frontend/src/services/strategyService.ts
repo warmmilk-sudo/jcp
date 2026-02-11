@@ -1,4 +1,4 @@
-import { GetStrategies, GetActiveStrategyID, SetActiveStrategy, AddStrategy, UpdateStrategy, DeleteStrategy, GenerateStrategy, GetAgentConfigs, AddAgentConfig, UpdateAgentConfig, DeleteAgentConfig } from '../../wailsjs/go/main/App';
+import { GetStrategies, GetActiveStrategyID, SetActiveStrategy, AddStrategy, UpdateStrategy, DeleteStrategy, GenerateStrategy, EnhancePrompt, GetAgentConfigs, AddAgentConfig, UpdateAgentConfig, DeleteAgentConfig } from '../../wailsjs/go/main/App';
 
 // 策略专属专家配置
 export interface StrategyAgent {
@@ -71,6 +71,25 @@ export const deleteStrategy = async (id: string): Promise<string> => {
 // AI生成策略
 export const generateStrategy = async (prompt: string): Promise<GenerateStrategyResponse> => {
   return await GenerateStrategy({ prompt });
+};
+
+// 提示词增强请求
+export interface EnhancePromptRequest {
+  originalPrompt: string;
+  agentRole: string;
+  agentName: string;
+}
+
+// 提示词增强响应
+export interface EnhancePromptResponse {
+  success: boolean;
+  enhancedPrompt?: string;
+  error?: string;
+}
+
+// 增强Agent提示词
+export const enhancePrompt = async (req: EnhancePromptRequest): Promise<EnhancePromptResponse> => {
+  return await EnhancePrompt(req);
 };
 
 // ========== Agent Config API ==========

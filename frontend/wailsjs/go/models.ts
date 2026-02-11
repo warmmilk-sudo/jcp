@@ -86,6 +86,38 @@ export namespace hottrend {
 
 export namespace main {
 	
+	export class EnhancePromptRequest {
+	    originalPrompt: string;
+	    agentRole: string;
+	    agentName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EnhancePromptRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.originalPrompt = source["originalPrompt"];
+	        this.agentRole = source["agentRole"];
+	        this.agentName = source["agentName"];
+	    }
+	}
+	export class EnhancePromptResponse {
+	    success: boolean;
+	    enhancedPrompt?: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EnhancePromptResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.enhancedPrompt = source["enhancedPrompt"];
+	        this.error = source["error"];
+	    }
+	}
 	export class GenerateStrategyRequest {
 	    prompt: string;
 	
@@ -266,6 +298,26 @@ export namespace models {
 	        this.aiConfigId = source["aiConfigId"];
 	    }
 	}
+	export class LayoutConfig {
+	    leftPanelWidth: number;
+	    rightPanelWidth: number;
+	    bottomPanelHeight: number;
+	    windowWidth: number;
+	    windowHeight: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LayoutConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.leftPanelWidth = source["leftPanelWidth"];
+	        this.rightPanelWidth = source["rightPanelWidth"];
+	        this.bottomPanelHeight = source["bottomPanelHeight"];
+	        this.windowWidth = source["windowWidth"];
+	        this.windowHeight = source["windowHeight"];
+	    }
+	}
 	export class ProxyConfig {
 	    mode: string;
 	    customUrl: string;
@@ -337,6 +389,7 @@ export namespace models {
 	    mcpServers: MCPServerConfig[];
 	    memory: MemoryConfig;
 	    proxy: ProxyConfig;
+	    layout: LayoutConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppConfig(source);
@@ -352,6 +405,7 @@ export namespace models {
 	        this.mcpServers = this.convertValues(source["mcpServers"], MCPServerConfig);
 	        this.memory = this.convertValues(source["memory"], MemoryConfig);
 	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
+	        this.layout = this.convertValues(source["layout"], LayoutConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -434,6 +488,7 @@ export namespace models {
 	        this.ma20 = source["ma20"];
 	    }
 	}
+	
 	export class LongHuBangDetail {
 	    rank: number;
 	    operName: string;

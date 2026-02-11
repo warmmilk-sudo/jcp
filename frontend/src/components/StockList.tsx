@@ -92,7 +92,7 @@ export const StockList: React.FC<StockListProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full fin-panel border-r fin-divider w-80 relative">
+    <div className="flex flex-col h-full fin-panel border-r fin-divider relative">
       <div className="p-4 fin-panel-strong border-b fin-divider">
         {/* 大盘指数 */}
         <div className="mb-4 pb-3 border-b fin-divider flex justify-center">

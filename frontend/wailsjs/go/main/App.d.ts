@@ -29,6 +29,8 @@ export function DeleteStrategy(arg1:string):Promise<string>;
 
 export function DoUpdate():Promise<string>;
 
+export function EnhancePrompt(arg1:main.EnhancePromptRequest):Promise<main.EnhancePromptResponse>;
+
 export function GenerateStrategy(arg1:main.GenerateStrategyRequest):Promise<main.GenerateStrategyResponse>;
 
 export function GetActiveStrategyID():Promise<string>;

@@ -297,7 +297,7 @@ func (s *Service) RunSmartMeetingWithCallback(ctx context.Context, aiConfig *mod
 			log.Error("create agent LLM error: %v", err)
 			continue
 		}
-		builder := s.createBuilder(agentLLM)
+		builder := s.createBuilder(agentLLM, agentAIConfig)
 
 		// 发送专家开始事件
 		if progressCallback != nil {
@@ -478,7 +478,7 @@ func (s *Service) runAgentsParallel(ctx context.Context, defaultLLM model.LLM, d
 					return
 				}
 			}
-			builder := s.createBuilder(agentLLM)
+			builder := s.createBuilder(agentLLM, agentAIConfig)
 
 			// 单个 Agent 超时控制
 			agentCtx, agentCancel := context.WithTimeout(parallelCtx, AgentTimeout)
@@ -727,12 +727,12 @@ func (s *Service) runSingleAgentWithHistory(
 }
 
 // createBuilder 创建 ExpertAgentBuilder
-func (s *Service) createBuilder(llm model.LLM) *adk.ExpertAgentBuilder {
+func (s *Service) createBuilder(llm model.LLM, aiConfig *models.AIConfig) *adk.ExpertAgentBuilder {
 	if s.mcpManager != nil {
-		return adk.NewExpertAgentBuilderFull(llm, s.toolRegistry, s.mcpManager)
+		return adk.NewExpertAgentBuilderFull(llm, aiConfig, s.toolRegistry, s.mcpManager)
 	}
 	if s.toolRegistry != nil {
-		return adk.NewExpertAgentBuilderWithTools(llm, s.toolRegistry)
+		return adk.NewExpertAgentBuilderWithTools(llm, aiConfig, s.toolRegistry)
 	}
-	return adk.NewExpertAgentBuilder(llm)
+	return adk.NewExpertAgentBuilder(llm, aiConfig)
 }

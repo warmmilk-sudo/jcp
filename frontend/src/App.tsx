@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { StockList } from './components/StockList';
 import { StockChart } from './components/StockChart';
 import { OrderBook as OrderBookComponent } from './components/OrderBook';
@@ -9,15 +9,34 @@ import { HotTrendDialog } from './components/HotTrendDialog';
 import { LongHuBangDialog } from './components/LongHuBangDialog';
 import { WelcomePage } from './components/WelcomePage';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
+import { ResizeHandle } from './components/ResizeHandle';
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from './services/watchlistService';
 import { getKLineData, getOrderBook } from './services/stockService';
 import { getOrCreateSession, StockSession, updateStockPosition } from './services/sessionService';
+import { getConfig, updateConfig } from './services/configService';
 import { useMarketEvents } from './hooks/useMarketEvents';
 import { Stock, KLineData, OrderBook, TimePeriod, Telegraph, MarketIndex, MarketStatus } from './types';
 import { Radio, Settings, List, Minus, Square, X, Copy, Briefcase, TrendingUp, BarChart3 } from 'lucide-react';
 import logo from './assets/images/logo.png';
 import { GetTelegraphList, OpenURL, WindowMinimize, WindowMaximize, WindowClose } from '../wailsjs/go/main/App';
-import { WindowIsMaximised } from '../wailsjs/runtime/runtime';
+import { WindowIsMaximised, WindowSetSize, WindowGetSize } from '../wailsjs/runtime/runtime';
+
+// 布局配置常量
+const LAYOUT_DEFAULTS = {
+  leftPanelWidth: 280,
+  rightPanelWidth: 384,
+  bottomPanelHeight: 256,
+};
+const LAYOUT_MIN = {
+  leftPanelWidth: 280,
+  rightPanelWidth: 384,
+  bottomPanelHeight: 256,
+};
+const LAYOUT_MAX = {
+  leftPanelWidth: 500,
+  rightPanelWidth: 700,
+  bottomPanelHeight: 450,
+};
 
 const App: React.FC = () => {
   const [watchlist, setWatchlist] = useState<Stock[]>([]);
@@ -38,6 +57,12 @@ const App: React.FC = () => {
   const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
   const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
   const [isMaximized, setIsMaximized] = useState(false);
+
+  // 布局状态
+  const [leftPanelWidth, setLeftPanelWidth] = useState(LAYOUT_DEFAULTS.leftPanelWidth);
+  const [rightPanelWidth, setRightPanelWidth] = useState(LAYOUT_DEFAULTS.rightPanelWidth);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(LAYOUT_DEFAULTS.bottomPanelHeight);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedStock = useMemo(() =>
     watchlist.find(s => s.symbol === selectedSymbol) || watchlist[0]
@@ -80,6 +105,81 @@ const App: React.FC = () => {
       setMarketIndices(indices);
     }
   }, []);
+
+  // 保存布局配置（防抖）
+  const saveLayoutConfig = useCallback(async (
+    left: number, right: number, bottom: number,
+    winWidth?: number, winHeight?: number
+  ) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const config = await getConfig();
+        const size = await WindowGetSize();
+        config.layout = {
+          leftPanelWidth: left,
+          rightPanelWidth: right,
+          bottomPanelHeight: bottom,
+          windowWidth: winWidth ?? size.w,
+          windowHeight: winHeight ?? size.h,
+        };
+        await updateConfig(config);
+      } catch (err) {
+        console.error('Failed to save layout config:', err);
+      }
+    }, 500);
+  }, []);
+
+  // 左侧面板 resize
+  const handleLeftResize = useCallback((delta: number) => {
+    setLeftPanelWidth(prev => {
+      const newWidth = Math.max(LAYOUT_MIN.leftPanelWidth, Math.min(LAYOUT_MAX.leftPanelWidth, prev + delta));
+      return newWidth;
+    });
+  }, []);
+
+  // 右侧面板 resize
+  const handleRightResize = useCallback((delta: number) => {
+    setRightPanelWidth(prev => {
+      const newWidth = Math.max(LAYOUT_MIN.rightPanelWidth, Math.min(LAYOUT_MAX.rightPanelWidth, prev - delta));
+      return newWidth;
+    });
+  }, []);
+
+  // 底部面板 resize
+  const handleBottomResize = useCallback((delta: number) => {
+    setBottomPanelHeight(prev => {
+      const newHeight = Math.max(LAYOUT_MIN.bottomPanelHeight, Math.min(LAYOUT_MAX.bottomPanelHeight, prev - delta));
+      return newHeight;
+    });
+  }, []);
+
+  // resize 结束时保存配置
+  const handleResizeEnd = useCallback(() => {
+    saveLayoutConfig(leftPanelWidth, rightPanelWidth, bottomPanelHeight);
+  }, [leftPanelWidth, rightPanelWidth, bottomPanelHeight, saveLayoutConfig]);
+
+  // 监听窗口 resize 事件
+  useEffect(() => {
+    const windowResizeTimeoutRef = { current: null as ReturnType<typeof setTimeout> | null };
+    const handleWindowResize = () => {
+      if (windowResizeTimeoutRef.current) {
+        clearTimeout(windowResizeTimeoutRef.current);
+      }
+      windowResizeTimeoutRef.current = setTimeout(() => {
+        saveLayoutConfig(leftPanelWidth, rightPanelWidth, bottomPanelHeight);
+      }, 500);
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+      if (windowResizeTimeoutRef.current) {
+        clearTimeout(windowResizeTimeoutRef.current);
+      }
+    };
+  }, [leftPanelWidth, rightPanelWidth, bottomPanelHeight, saveLayoutConfig]);
 
   // 获取快讯列表
   const handleShowTelegraphList = async () => {
@@ -166,6 +266,18 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadWatchlist = async () => {
       try {
+        // 加载布局配置
+        const config = await getConfig();
+        if (config.layout) {
+          if (config.layout.leftPanelWidth > 0) setLeftPanelWidth(config.layout.leftPanelWidth);
+          if (config.layout.rightPanelWidth > 0) setRightPanelWidth(config.layout.rightPanelWidth);
+          if (config.layout.bottomPanelHeight > 0) setBottomPanelHeight(config.layout.bottomPanelHeight);
+          // 恢复窗口大小
+          if (config.layout.windowWidth > 0 && config.layout.windowHeight > 0) {
+            WindowSetSize(config.layout.windowWidth, config.layout.windowHeight);
+          }
+        }
+
         const list = await getWatchlist();
         setWatchlist(list);
         if (list.length > 0) {
@@ -335,14 +447,19 @@ const App: React.FC = () => {
       {/* Main Content Grid */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar: Watchlist */}
-        <StockList
-          stocks={watchlist}
-          selectedSymbol={selectedSymbol}
-          onSelect={handleSelectStock}
-          onAddStock={handleAddStock}
-          onRemoveStock={handleRemoveStock}
-          marketIndices={marketIndices}
-        />
+        <div style={{ width: leftPanelWidth }} className="shrink-0">
+          <StockList
+            stocks={watchlist}
+            selectedSymbol={selectedSymbol}
+            onSelect={handleSelectStock}
+            onAddStock={handleAddStock}
+            onRemoveStock={handleRemoveStock}
+            marketIndices={marketIndices}
+          />
+        </div>
+
+        {/* Left Resize Handle */}
+        <ResizeHandle direction="horizontal" onResize={handleLeftResize} onResizeEnd={handleResizeEnd} />
 
         {/* Center Panel: Charts & Data */}
         <div className="flex-1 flex flex-col min-w-0 bg-transparent">
@@ -417,9 +534,12 @@ const App: React.FC = () => {
                   stock={selectedStock}
                />
             </div>
-            
+
+            {/* Bottom Resize Handle */}
+            <ResizeHandle direction="vertical" onResize={handleBottomResize} onResizeEnd={handleResizeEnd} />
+
             {/* Bottom Info Panel: Order Book Only */}
-            <div className="h-64 border-t fin-divider flex fin-panel shrink-0">
+            <div style={{ height: bottomPanelHeight }} className="border-t fin-divider flex fin-panel shrink-0">
                <div className="flex-1 overflow-hidden relative">
                   <OrderBookComponent data={orderBook} />
                </div>
@@ -427,13 +547,18 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        {/* Right Resize Handle */}
+        <ResizeHandle direction="horizontal" onResize={handleRightResize} onResizeEnd={handleResizeEnd} />
+
         {/* Right Panel: AI Agents */}
-        <AgentRoom
-          stock={selectedStock}
-          kLineData={kLineData}
-          session={currentSession}
-          onSessionUpdate={setCurrentSession}
-        />
+        <div style={{ width: rightPanelWidth }} className="shrink-0">
+          <AgentRoom
+            stock={selectedStock}
+            kLineData={kLineData}
+            session={currentSession}
+            onSessionUpdate={setCurrentSession}
+          />
+        </div>
       </div>
 
       <SettingsDialog isOpen={showSettings} onClose={() => setShowSettings(false)} />

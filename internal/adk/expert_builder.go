@@ -13,28 +13,30 @@ import (
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/model"
 	"google.golang.org/adk/tool"
+	"google.golang.org/genai"
 )
 
 // ExpertAgentBuilder 专家 Agent 构建器
 type ExpertAgentBuilder struct {
 	llm          model.LLM
+	aiConfig     *models.AIConfig // AI 配置（包含 temperature、maxTokens）
 	toolRegistry *tools.Registry
 	mcpManager   *mcp.Manager
 }
 
 // NewExpertAgentBuilder 创建专家 Agent 构建器
-func NewExpertAgentBuilder(llm model.LLM) *ExpertAgentBuilder {
-	return &ExpertAgentBuilder{llm: llm}
+func NewExpertAgentBuilder(llm model.LLM, aiConfig *models.AIConfig) *ExpertAgentBuilder {
+	return &ExpertAgentBuilder{llm: llm, aiConfig: aiConfig}
 }
 
 // NewExpertAgentBuilderWithTools 创建带工具的专家 Agent 构建器
-func NewExpertAgentBuilderWithTools(llm model.LLM, registry *tools.Registry) *ExpertAgentBuilder {
-	return &ExpertAgentBuilder{llm: llm, toolRegistry: registry}
+func NewExpertAgentBuilderWithTools(llm model.LLM, aiConfig *models.AIConfig, registry *tools.Registry) *ExpertAgentBuilder {
+	return &ExpertAgentBuilder{llm: llm, aiConfig: aiConfig, toolRegistry: registry}
 }
 
 // NewExpertAgentBuilderFull 创建完整配置的专家 Agent 构建器
-func NewExpertAgentBuilderFull(llm model.LLM, registry *tools.Registry, mcpMgr *mcp.Manager) *ExpertAgentBuilder {
-	return &ExpertAgentBuilder{llm: llm, toolRegistry: registry, mcpManager: mcpMgr}
+func NewExpertAgentBuilderFull(llm model.LLM, aiConfig *models.AIConfig, registry *tools.Registry, mcpMgr *mcp.Manager) *ExpertAgentBuilder {
+	return &ExpertAgentBuilder{llm: llm, aiConfig: aiConfig, toolRegistry: registry, mcpManager: mcpMgr}
 }
 
 // BuildAgent 根据配置构建 LLM Agent
@@ -55,16 +57,33 @@ func (b *ExpertAgentBuilder) BuildAgentWithContext(config *models.AgentConfig, s
 	// 获取 MCP toolsets
 	var toolsets []tool.Toolset
 	if b.mcpManager != nil && len(config.MCPServers) > 0 {
+		log.Info("Agent %s 请求 MCP servers: %v", config.ID, config.MCPServers)
 		toolsets = b.mcpManager.GetToolsetsByIDs(config.MCPServers)
+		log.Info("Agent %s 获取到 %d 个 toolsets", config.ID, len(toolsets))
+		// 打印每个 toolset 的名称
+		for i, ts := range toolsets {
+			log.Info("Agent %s toolset[%d]: %s", config.ID, i, ts.Name())
+		}
+	}
+
+	// 构建生成配置（应用 temperature 和 maxTokens）
+	var generateConfig *genai.GenerateContentConfig
+	if b.aiConfig != nil {
+		temp := float32(b.aiConfig.Temperature)
+		generateConfig = &genai.GenerateContentConfig{
+			Temperature:     &temp,
+			MaxOutputTokens: int32(b.aiConfig.MaxTokens),
+		}
 	}
 
 	return llmagent.New(llmagent.Config{
-		Name:        config.ID,
-		Model:       b.llm,
-		Description: config.Role,
-		Instruction: instruction,
-		Tools:       agentTools,
-		Toolsets:    toolsets,
+		Name:                  config.ID,
+		Model:                 b.llm,
+		Description:           config.Role,
+		Instruction:           instruction,
+		Tools:                 agentTools,
+		Toolsets:              toolsets,
+		GenerateContentConfig: generateConfig,
 	})
 }
 
@@ -151,9 +170,9 @@ func (b *ExpertAgentBuilder) buildInstructionWithContext(config *models.AgentCon
 
 // buildToolsDescription 构建可用工具说明
 func (b *ExpertAgentBuilder) buildToolsDescription(config *models.AgentConfig) string {
-	var searchTools []string    // 搜索类工具
-	var dataTools []string      // 数据查询工具
-	var otherTools []string     // 其他工具
+	var searchTools []string // 搜索类工具
+	var dataTools []string   // 数据查询工具
+	var otherTools []string  // 其他工具
 
 	// 搜索类工具关键词
 	searchKeywords := []string{"search", "搜索", "web", "网页", "tavily", "google", "bing"}

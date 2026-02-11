@@ -58,7 +58,6 @@ func (m *Manager) LoadConfigs(configs []models.MCPServerConfig) error {
 			continue
 		}
 		m.configs[cfg.ID] = cfg
-		log.Info("MCP 服务器配置已加载: %s (延迟初始化)", cfg.Name)
 	}
 	return nil
 }
@@ -84,14 +83,14 @@ func createTransport(cfg *models.MCPServerConfig) mcp.Transport {
 // createToolset 为指定配置创建新的 toolset
 func (m *Manager) createToolset(cfg *models.MCPServerConfig) (tool.Toolset, error) {
 	ts, err := mcptoolset.New(mcptoolset.Config{
-		Transport:  createTransport(cfg),
-		ToolFilter: tool.StringPredicate(cfg.ToolFilter),
+		Transport: createTransport(cfg),
 	})
 	if err != nil {
 		return nil, err
 	}
-	log.Info("MCP toolset 已创建: %s", cfg.Name)
-	return ts, nil
+	log.Debug("MCP toolset 已创建: %s", cfg.Name)
+	// 使用前缀包装器，确保工具名称匹配
+	return NewPrefixedToolset(ts, cfg.Name), nil
 }
 
 // GetToolset 获取指定 MCP 服务器的 toolset（按需创建新连接）
@@ -145,11 +144,13 @@ func (m *Manager) GetToolsetsByIDs(ids []string) []tool.Toolset {
 	for _, id := range ids {
 		if cfg, ok := m.configs[id]; ok {
 			configs[id] = cfg
+		} else {
+			log.Warn("MCP 服务器配置不存在: %s, 已加载的配置: %v", id, m.getConfigIDs())
 		}
 	}
 	m.mu.RUnlock()
 
-	log.Info("请求获取 toolsets, IDs: %v", ids)
+	log.Info("请求获取 toolsets, IDs: %v, 匹配到: %d", ids, len(configs))
 	var result []tool.Toolset
 	for id, cfg := range configs {
 		ts, err := m.createToolset(cfg)
@@ -162,6 +163,15 @@ func (m *Manager) GetToolsetsByIDs(ids []string) []tool.Toolset {
 	}
 	log.Info("返回 toolsets 数量: %d", len(result))
 	return result
+}
+
+// getConfigIDs 获取已加载的配置 ID 列表（需要在持有锁时调用）
+func (m *Manager) getConfigIDs() []string {
+	ids := make([]string, 0, len(m.configs))
+	for id := range m.configs {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // TestConnection 测试指定 MCP 服务器的连接

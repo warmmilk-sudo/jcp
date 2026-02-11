@@ -60,6 +60,7 @@ type AppConfig struct {
 	MCPServers    []MCPServerConfig `json:"mcpServers"`    // MCP服务器配置列表
 	Memory        MemoryConfig      `json:"memory"`        // 记忆管理配置
 	Proxy         ProxyConfig       `json:"proxy"`         // 代理配置
+	Layout        LayoutConfig      `json:"layout"`        // 界面布局配置
 }
 
 // ProxyMode 代理模式
@@ -85,4 +86,13 @@ type MemoryConfig struct {
 	MaxKeyFacts       int    `json:"maxKeyFacts"`       // 最大关键事实数
 	MaxSummaryLength  int    `json:"maxSummaryLength"`  // 摘要最大字数
 	CompressThreshold int    `json:"compressThreshold"` // 触发压缩的轮次数
+}
+
+// LayoutConfig 界面布局配置
+type LayoutConfig struct {
+	LeftPanelWidth    int `json:"leftPanelWidth"`    // 左侧面板宽度(px)
+	RightPanelWidth   int `json:"rightPanelWidth"`   // 右侧面板宽度(px)
+	BottomPanelHeight int `json:"bottomPanelHeight"` // 底部面板高度(px)
+	WindowWidth       int `json:"windowWidth"`       // 窗口宽度(px)
+	WindowHeight      int `json:"windowHeight"`      // 窗口高度(px)
 }

@@ -371,9 +371,9 @@ type GenerateResult struct {
 
 // GenerateInput 策略生成输入
 type GenerateInput struct {
-	Prompt     string            // 用户描述
-	Tools      []ToolInfoForGen  // 可用工具列表
-	MCPServers []MCPInfoForGen   // MCP服务器列表
+	Prompt     string           // 用户描述
+	Tools      []ToolInfoForGen // 可用工具列表
+	MCPServers []MCPInfoForGen  // MCP服务器列表
 }
 
 // ToolInfoForGen 工具信息（用于生成）
@@ -384,8 +384,9 @@ type ToolInfoForGen struct {
 
 // MCPInfoForGen MCP服务器信息（用于生成）
 type MCPInfoForGen struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Tools []string `json:"tools"` // 该服务器提供的工具列表
 }
 
 // Generate 根据用户描述生成策略
@@ -417,30 +418,44 @@ func (s *StrategyService) Generate(ctx context.Context, input GenerateInput) (*G
 // buildGeneratePrompt 构建AI提示词
 func (s *StrategyService) buildGeneratePrompt(input GenerateInput) string {
 	var sb strings.Builder
-	sb.WriteString("你是投资策略设计专家。根据用户需求设计全新的投资策略和专属专家团队。\n\n")
+	sb.WriteString("你是投资策略设计专家。根据用户需求设计投资策略和专属团队成员。\n\n")
+
+	// 核心约束
+	sb.WriteString("## 核心约束\n")
+	sb.WriteString("1. 每个成员必须是独立个体，专注于特定的分析维度或职能\n")
+	sb.WriteString("2. 禁止创建汇总型/裁决型角色（如：总结专家、决策裁判、综合分析师等）\n")
+	sb.WriteString("3. 成员可以是各类投资相关角色：分析师、交易员、研究员、风控官、行业专家、散户、游资等\n")
 
 	// 动态生成可用工具列表
 	sb.WriteString("## 可用内置工具\n")
 	for _, t := range input.Tools {
-		sb.WriteString(fmt.Sprintf("- %s: %s\n", t.Name, t.Description))
+		fmt.Fprintf(&sb, "- %s: %s\n", t.Name, t.Description)
 	}
 	sb.WriteString("\n")
 
 	// 动态生成MCP服务器列表
 	if len(input.MCPServers) > 0 {
 		sb.WriteString("## 可用MCP服务器\n")
-		sb.WriteString("MCP服务器提供额外的工具能力，可在专家的mcpServers字段中指定服务器ID。\n")
+		sb.WriteString("当成员需要使用MCP服务器的工具时，在mcpServers字段中填写服务器ID即可。\n")
+		sb.WriteString("注意：MCP工具不要写入tools字段，只需在mcpServers中指定服务器ID。\n\n")
 		for _, m := range input.MCPServers {
-			sb.WriteString(fmt.Sprintf("- %s (ID: %s)\n", m.Name, m.ID))
+			fmt.Fprintf(&sb, "### %s (ID: %s)\n", m.Name, m.ID)
+			if len(m.Tools) > 0 {
+				sb.WriteString("提供的工具：\n")
+				for _, tool := range m.Tools {
+					fmt.Fprintf(&sb, "- %s\n", tool)
+				}
+			}
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
 	}
 
 	sb.WriteString("## 用户需求\n")
 	sb.WriteString(input.Prompt)
 	sb.WriteString("\n\n## 任务\n")
-	sb.WriteString("根据用户需求，设计一个全新的投资策略，包含2-4个专属专家。\n")
-	sb.WriteString("每个专家需要有独特的分析视角和专业的系统指令。\n\n")
+	sb.WriteString("根据用户需求，设计一个投资策略，包含4-6个团队成员。\n")
+	sb.WriteString("每个成员需要有独特的分析视角和专业的系统指令。\n")
+	sb.WriteString("重要：必须为每个成员分配合适的工具，确保tools字段包含该成员需要使用的具体工具名称。\n\n")
 
 	sb.WriteString("## 输出格式（纯JSON）\n")
 	sb.WriteString("```json\n")
@@ -461,12 +476,12 @@ func (s *StrategyService) getOutputTemplate() string {
     "agents": [
       {
         "id": "agent-1",
-        "name": "专家名称",
-        "role": "专家角色定位",
+        "name": "成员名称",
+        "role": "角色定位",
         "avatar": "单字头像",
         "color": "#颜色代码",
-        "instruction": "详细的系统指令...",
-        "tools": ["工具名称"],
+        "instruction": "# 角色定位\n你是...\n\n## 核心职责\n- 职责1\n- 职责2\n\n## 分析框架\n### 1. 分析维度一\n- 要点\n\n### 2. 分析维度二\n- 要点\n\n## 工具使用\n- 使用 get-stock-info 获取股票基本信息\n- 使用 get-kline-data 获取K线数据进行技术分析\n\n## 输出要求\n1. 要求一\n2. 要求二",
+        "tools": ["get-stock-info", "get-kline-data"],
         "mcpServers": ["MCP服务器ID（可选）"]
       }
     ]
@@ -622,4 +637,92 @@ func (s *StrategyService) GetAgentsByIDs(ids []string) []models.AgentConfig {
 		}
 	}
 	return result
+}
+
+// EnhancePromptInput 提示词增强输入
+type EnhancePromptInput struct {
+	OriginalPrompt string `json:"originalPrompt"` // 原始提示词
+	AgentRole      string `json:"agentRole"`      // Agent角色
+	AgentName      string `json:"agentName"`      // Agent名称
+}
+
+// EnhancePromptResult 提示词增强结果
+type EnhancePromptResult struct {
+	EnhancedPrompt string `json:"enhancedPrompt"` // 增强后的提示词
+}
+
+// EnhancePrompt 增强Agent提示词
+func (s *StrategyService) EnhancePrompt(ctx context.Context, input EnhancePromptInput) (*EnhancePromptResult, error) {
+	if s.llm == nil {
+		return nil, fmt.Errorf("LLM未配置")
+	}
+	strategyLog.Info("开始增强提示词, agent=%s, role=%s", input.AgentName, input.AgentRole)
+
+	// 构建AI提示词
+	aiPrompt := s.buildEnhancePrompt(input)
+
+	// 调用LLM
+	response, err := s.callLLM(ctx, aiPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("调用LLM失败: %w", err)
+	}
+
+	// 解析结果
+	result, err := s.parseEnhanceResponse(response)
+	if err != nil {
+		return nil, fmt.Errorf("解析结果失败: %w", err)
+	}
+
+	strategyLog.Info("提示词增强完成")
+	return result, nil
+}
+
+// buildEnhancePrompt 构建增强提示词的AI提示
+func (s *StrategyService) buildEnhancePrompt(input EnhancePromptInput) string {
+	var sb strings.Builder
+	sb.WriteString("你是一位专业的 AI Agent 提示词工程师，擅长将简单的提示词扩展为结构化、专业的系统指令。\n\n")
+
+	sb.WriteString("## 任务\n")
+	sb.WriteString("将用户提供的原始提示词，扩展为一个完整、结构化的 Agent 系统指令。\n\n")
+
+	sb.WriteString("## Agent 信息\n")
+	fmt.Fprintf(&sb, "- 名称：%s\n", input.AgentName)
+	fmt.Fprintf(&sb, "- 角色：%s\n", input.AgentRole)
+	sb.WriteString("\n")
+
+	sb.WriteString("## 原始提示词\n")
+	sb.WriteString(input.OriginalPrompt)
+	sb.WriteString("\n\n")
+
+	sb.WriteString("## 增强要求\n")
+	sb.WriteString("1. 保持原始意图，但使其更加清晰、专业\n")
+	sb.WriteString("2. 添加结构化的分析框架或工作流程\n")
+	sb.WriteString("3. 明确输出格式和要求\n")
+	sb.WriteString("4. 添加角色定位和核心职责\n")
+	sb.WriteString("5. 使用 Markdown 格式组织内容\n")
+	sb.WriteString("6. 保持简洁，避免冗余\n\n")
+
+	sb.WriteString("## 输出格式（纯JSON）\n")
+	sb.WriteString("```json\n")
+	sb.WriteString(`{
+  "enhancedPrompt": "增强后的完整提示词（使用Markdown格式）"
+}`)
+	sb.WriteString("\n```")
+
+	return sb.String()
+}
+
+// parseEnhanceResponse 解析增强响应
+func (s *StrategyService) parseEnhanceResponse(response string) (*EnhancePromptResult, error) {
+	jsonStr := extractJSON(response)
+	if jsonStr == "" {
+		return nil, fmt.Errorf("未找到有效JSON")
+	}
+
+	var result EnhancePromptResult
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		return nil, fmt.Errorf("JSON解析失败: %w", err)
+	}
+
+	return &result, nil
 }

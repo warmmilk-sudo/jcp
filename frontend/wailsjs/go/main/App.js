@@ -46,6 +46,10 @@ export function DoUpdate() {
   return window['go']['main']['App']['DoUpdate']();
 }
 
+export function EnhancePrompt(arg1) {
+  return window['go']['main']['App']['EnhancePrompt'](arg1);
+}
+
 export function GenerateStrategy(arg1) {
   return window['go']['main']['App']['GenerateStrategy'](arg1);
 }

@@ -391,7 +391,7 @@ export const AgentRoom: React.FC<AgentRoomProps> = ({ session, onSessionUpdate }
   };
 
   return (
-    <div className="relative flex flex-col h-full fin-panel border-l fin-divider w-96 shadow-xl shrink-0">
+    <div className="relative flex flex-col h-full fin-panel border-l fin-divider shadow-xl">
       {/* Header */}
       <div className="p-4 border-b fin-divider fin-panel-strong">
         <div className="flex items-center justify-between">
