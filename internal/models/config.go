@@ -55,16 +55,17 @@ type MCPServerConfig struct {
 
 // AppConfig 应用配置
 type AppConfig struct {
-	Theme         string            `json:"theme"` // 主题色: military, ocean, purple, orange, dark
-	AIConfigs     []AIConfig        `json:"aiConfigs"`
-	DefaultAIID   string            `json:"defaultAiId"`
-	StrategyAIID  string            `json:"strategyAiId"`  // 策略生成用AI
-	ModeratorAIID string            `json:"moderatorAiId"` // 意图分析(小韭菜)用AI
-	MCPServers    []MCPServerConfig `json:"mcpServers"`    // MCP服务器配置列表
-	Memory        MemoryConfig      `json:"memory"`        // 记忆管理配置
-	Proxy         ProxyConfig       `json:"proxy"`         // 代理配置
-	Layout        LayoutConfig      `json:"layout"`        // 界面布局配置
-	OpenClaw      OpenClawConfig    `json:"openClaw"`      // OpenClaw 服务配置
+	Theme           string            `json:"theme"`           // 主题色: military, ocean, purple, orange, dark
+	CandleColorMode string            `json:"candleColorMode"` // 涨跌颜色模式: red-up(红涨绿跌) / green-up(绿涨红跌)
+	AIConfigs       []AIConfig        `json:"aiConfigs"`
+	DefaultAIID     string            `json:"defaultAiId"`
+	StrategyAIID    string            `json:"strategyAiId"`  // 策略生成用AI
+	ModeratorAIID   string            `json:"moderatorAiId"` // 意图分析(小韭菜)用AI
+	MCPServers      []MCPServerConfig `json:"mcpServers"`    // MCP服务器配置列表
+	Memory          MemoryConfig      `json:"memory"`        // 记忆管理配置
+	Proxy           ProxyConfig       `json:"proxy"`         // 代理配置
+	Layout          LayoutConfig      `json:"layout"`        // 界面布局配置
+	OpenClaw        OpenClawConfig    `json:"openClaw"`      // OpenClaw 服务配置
 }
 
 // ProxyMode 代理模式

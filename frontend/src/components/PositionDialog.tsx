@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Briefcase } from 'lucide-react';
 import type { StockPosition } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
+import { useCandleColor } from '../contexts/CandleColorContext';
 
 interface PositionDialogProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export const PositionDialog: React.FC<PositionDialogProps> = ({
   onSave,
 }) => {
   const { colors } = useTheme();
+  const cc = useCandleColor();
   const [shares, setShares] = useState<string>('');
   const [costPrice, setCostPrice] = useState<string>('');
 
@@ -124,7 +126,7 @@ export const PositionDialog: React.FC<PositionDialogProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className={colors.isDark ? 'text-slate-400' : 'text-slate-500'}>盈亏</span>
-                <span className={`font-mono ${profitLoss >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                <span className={`font-mono ${cc.getColorClass(profitLoss >= 0)}`}>
                   {profitLoss >= 0 ? '+' : ''}{profitLoss.toFixed(2)} ({profitLossPercent >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%)
                 </span>
               </div>

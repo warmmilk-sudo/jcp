@@ -1,5 +1,6 @@
 import React from 'react';
 import { MarketIndex } from '../types';
+import { useCandleColor } from '../contexts/CandleColorContext';
 
 interface MarketIndicesProps {
   indices: MarketIndex[];
@@ -28,8 +29,9 @@ interface MarketIndexItemProps {
 }
 
 const MarketIndexItem: React.FC<MarketIndexItemProps> = ({ index }) => {
+  const cc = useCandleColor();
   const isUp = index.change >= 0;
-  const colorClass = isUp ? 'text-red-500' : 'text-green-500';
+  const colorClass = cc.getColorClass(isUp);
   const sign = isUp ? '+' : '';
 
   return (

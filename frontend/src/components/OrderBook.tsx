@@ -1,6 +1,7 @@
 import React from 'react';
 import { OrderBook as OrderBookType } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
+import { useCandleColor } from '../contexts/CandleColorContext';
 
 interface OrderBookProps {
   data: OrderBookType;
@@ -8,6 +9,7 @@ interface OrderBookProps {
 
 export const OrderBook: React.FC<OrderBookProps> = ({ data }) => {
   const { colors } = useTheme();
+  const cc = useCandleColor();
   // 安全检查：确保 data 及其属性存在
   const bids = data?.bids ?? [];
   const asks = data?.asks ?? [];
@@ -38,7 +40,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ data }) => {
                     className={`absolute top-0 left-0 bottom-0 transition-all duration-300 ${colors.isDark ? 'bg-green-900/20' : 'bg-green-500/10'}`}
                     style={{ width: `${Math.min(bid.percent * 5, 100)}%` }}
                   />
-                  <span className="text-green-500 relative z-10">{bid.price.toFixed(2)}</span>
+                  <span className={`${cc.downClass} relative z-10`}>{bid.price.toFixed(2)}</span>
                   <span className={`relative z-10 ${colors.isDark ? 'text-slate-300' : 'text-slate-600'}`}>{bid.size}</span>
                 </div>
              ))}
@@ -48,11 +50,11 @@ export const OrderBook: React.FC<OrderBookProps> = ({ data }) => {
        {/* 委比信息 */}
        <div className="w-24 flex flex-col items-center justify-center border-r fin-divider fin-panel-strong z-10 shadow-inner">
            <div className={`text-[10px] ${colors.isDark ? 'text-slate-500' : 'text-slate-400'}`}>委比</div>
-           <div className={`font-bold my-1 ${parseFloat(weibi) >= 0 ? 'text-red-500' : 'text-green-500'}`}>{weibi}%</div>
+           <div className={`font-bold my-1 ${parseFloat(weibi) >= 0 ? cc.upClass : cc.downClass}`}>{weibi}%</div>
            <div className={`text-[10px] ${colors.isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-             <span className="text-red-500">{weibiBuy}%</span>
+             <span className={cc.upClass}>{weibiBuy}%</span>
              <span className="mx-1">/</span>
-             <span className="text-green-500">{weibiSell}%</span>
+             <span className={cc.downClass}>{weibiSell}%</span>
            </div>
        </div>
 
@@ -69,7 +71,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ data }) => {
                     className={`absolute top-0 right-0 bottom-0 transition-all duration-300 ${colors.isDark ? 'bg-red-900/20' : 'bg-red-500/10'}`}
                     style={{ width: `${Math.min(ask.percent * 5, 100)}%` }}
                   />
-                  <span className="text-red-500 relative z-10">{ask.price.toFixed(2)}</span>
+                  <span className={`${cc.upClass} relative z-10`}>{ask.price.toFixed(2)}</span>
                   <span className={`relative z-10 ${colors.isDark ? 'text-slate-300' : 'text-slate-600'}`}>{ask.size}</span>
                 </div>
             ))}

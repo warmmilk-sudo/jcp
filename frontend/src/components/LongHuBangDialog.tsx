@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, TrendingUp, RefreshCw, Calendar, ChevronDown } from 'lucide-react';
 import { GetLongHuBangList, GetLongHuBangDetail, GetTradeDates } from '../../wailsjs/go/main/App';
 import { models } from '../../wailsjs/go/models';
+import { useCandleColor } from '../contexts/CandleColorContext';
 
 interface LongHuBangDialogProps {
   isOpen: boolean;
@@ -256,6 +257,7 @@ const ItemList: React.FC<{
   setDetailLoading: (loading: boolean) => void;
   onLoadMore: () => void;
 }> = ({ items, loading, loadingMore, hasMore, selectedItem, onSelect, setDetails, setDetailLoading, onLoadMore }) => {
+  const cc = useCandleColor();
   const listRef = React.useRef<HTMLDivElement>(null);
 
   // 滚动到底部时加载更多
@@ -314,13 +316,13 @@ const ItemList: React.FC<{
               <span className="font-medium fin-text-primary">{item.name}</span>
               <span className="text-xs fin-text-tertiary font-mono">{item.code}</span>
             </div>
-            <span className={`text-sm font-mono font-medium ${item.changePercent >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+            <span className={`text-sm font-mono font-medium ${cc.getColorClass(item.changePercent >= 0)}`}>
               {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="fin-text-tertiary">{item.tradeDate}</span>
-            <span className={`font-mono ${item.netBuyAmt >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+            <span className={`font-mono ${cc.getColorClass(item.netBuyAmt >= 0)}`}>
               净买入 {formatAmount(item.netBuyAmt)}
             </span>
           </div>
@@ -349,6 +351,7 @@ const BrokerRow: React.FC<{
   type: 'buy' | 'sell';
   formatAmount: (amt: number) => string;
 }> = ({ index, detail, type, formatAmount }) => {
+  const cc = useCandleColor();
   const amt = type === 'buy' ? detail.buyAmt : detail.sellAmt;
   const percent = type === 'buy' ? detail.buyPercent : detail.sellPercent;
 
@@ -356,7 +359,7 @@ const BrokerRow: React.FC<{
     <div className="flex items-center text-sm px-2 py-2 rounded hover:bg-slate-500/5 transition-colors">
       <span className="w-5 text-xs fin-text-tertiary">{index + 1}</span>
       <span className="flex-1 truncate fin-text-primary text-xs">{detail.operName}</span>
-      <span className={`w-20 text-right font-mono ${type === 'buy' ? 'text-red-400' : 'text-green-400'}`}>
+      <span className={`w-20 text-right font-mono ${type === 'buy' ? cc.upClass : cc.downClass}`}>
         {formatAmount(amt)}
       </span>
       <span className="w-16 text-right text-xs fin-text-tertiary">
@@ -372,11 +375,16 @@ const BrokerSection: React.FC<{
   details: models.LongHuBangDetail[];
   type: 'buy' | 'sell';
   formatAmount: (amt: number) => string;
-}> = ({ title, details, type, formatAmount }) => (
+}> = ({ title, details, type, formatAmount }) => {
+  const cc = useCandleColor();
+  const colorCls = type === 'buy' ? cc.upClass : cc.downClass;
+  const bgCls = type === 'buy' ? (cc.mode === 'red-up' ? 'bg-red-500' : 'bg-green-500') : (cc.mode === 'red-up' ? 'bg-green-500' : 'bg-red-500');
+  const borderCls = type === 'buy' ? (cc.mode === 'red-up' ? 'border-red-500/20' : 'border-green-500/20') : (cc.mode === 'red-up' ? 'border-green-500/20' : 'border-red-500/20');
+  return (
   <div className="mb-5">
-    <div className={`flex items-center gap-2 mb-3 pb-2 border-b ${type === 'buy' ? 'border-red-500/20' : 'border-green-500/20'}`}>
-      <div className={`w-1 h-4 rounded ${type === 'buy' ? 'bg-red-500' : 'bg-green-500'}`} />
-      <h3 className={`text-sm font-medium ${type === 'buy' ? 'text-red-500' : 'text-green-500'}`}>
+    <div className={`flex items-center gap-2 mb-3 pb-2 border-b ${borderCls}`}>
+      <div className={`w-1 h-4 rounded ${bgCls}`} />
+      <h3 className={`text-sm font-medium ${colorCls}`}>
         {title}
       </h3>
     </div>
@@ -391,6 +399,7 @@ const BrokerSection: React.FC<{
     )}
   </div>
 );
+};
 
 // 统计卡片组件
 const StatCard: React.FC<{
@@ -408,22 +417,24 @@ const StatCard: React.FC<{
 const StockHeader: React.FC<{
   item: models.LongHuBangItem;
   formatAmount: (amt: number) => string;
-}> = ({ item, formatAmount }) => (
+}> = ({ item, formatAmount }) => {
+  const cc = useCandleColor();
+  return (
   <div className="mb-5">
     <div className="flex items-baseline gap-3 mb-4">
       <span className="text-2xl font-bold fin-text-primary">{item.name}</span>
       <span className="text-sm fin-text-tertiary font-mono">{item.code}</span>
-      <span className={`text-lg font-mono font-semibold ml-auto ${item.changePercent >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+      <span className={`text-lg font-mono font-semibold ml-auto ${cc.getColorClass(item.changePercent >= 0)}`}>
         {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
       </span>
     </div>
     <div className="grid grid-cols-2 gap-3">
       <StatCard label="收盘价" value={item.closePrice.toFixed(2)} />
       <StatCard label="换手率" value={`${item.turnoverRate.toFixed(2)}%`} />
-      <StatCard label="净买入" value={formatAmount(item.netBuyAmt)} valueClass="text-red-500" />
+      <StatCard label="净买入" value={formatAmount(item.netBuyAmt)} valueClass={cc.upClass} />
       <StatCard label="成交占比" value={`${item.dealRatio.toFixed(2)}%`} />
-      <StatCard label="买入额" value={formatAmount(item.buyAmt)} valueClass="text-red-400" />
-      <StatCard label="卖出额" value={formatAmount(item.sellAmt)} valueClass="text-green-400" />
+      <StatCard label="买入额" value={formatAmount(item.buyAmt)} valueClass={cc.upClass} />
+      <StatCard label="卖出额" value={formatAmount(item.sellAmt)} valueClass={cc.downClass} />
     </div>
     <div className="mt-3 px-3 py-2 rounded-lg bg-slate-500/5">
       <span className="text-xs fin-text-tertiary">上榜原因: </span>
@@ -431,6 +442,7 @@ const StockHeader: React.FC<{
     </div>
   </div>
 );
+};
 
 // 详情面板组件
 const DetailPanel: React.FC<{

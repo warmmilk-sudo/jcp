@@ -66,7 +66,8 @@ func (cs *ConfigService) loadConfig() error {
 // defaultConfig 默认配置
 func (cs *ConfigService) defaultConfig() *models.AppConfig {
 	return &models.AppConfig{
-		Theme:       "military",
+		Theme:           "military",
+		CandleColorMode: "red-up",
 		AIConfigs:   []models.AIConfig{},
 		DefaultAIID: "",
 		Memory: models.MemoryConfig{

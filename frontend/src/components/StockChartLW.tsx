@@ -18,6 +18,7 @@ import {
 } from 'lightweight-charts';
 import { KLineData, TimePeriod, Stock } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
+import { useCandleColor } from '../contexts/CandleColorContext';
 
 interface StockChartProps {
   data: KLineData[];
@@ -75,6 +76,7 @@ function formatTimeDisplay(timeStr: string): string {
 
 export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriodChange, stock }) => {
   const { colors } = useTheme();
+  const cc = useCandleColor();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const volumeContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -96,10 +98,10 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
     background: colors.isDark ? '#0f172a' : '#ffffff',
     textColor: colors.isDark ? '#94a3b8' : '#64748b',
     gridColor: colors.isDark ? '#1e293b' : '#e2e8f0',
-    upColor: '#ef4444',
-    downColor: '#22c55e',
+    upColor: cc.upColor,
+    downColor: cc.downColor,
     priceLineColor: colors.isDark ? '#64748b' : '#94a3b8',
-  }), [colors.isDark]);
+  }), [colors.isDark, cc.upColor, cc.downColor]);
 
   const periods: { id: TimePeriod; label: string }[] = [
     { id: '1m', label: '分时' },
@@ -110,10 +112,10 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
 
   const getPriceColor = useCallback((price: number) => {
     if (preClose <= 0) return colors.isDark ? 'text-slate-100' : 'text-slate-700';
-    if (price > preClose) return 'text-red-500';
-    if (price < preClose) return 'text-green-500';
+    if (price > preClose) return cc.upClass;
+    if (price < preClose) return cc.downClass;
     return colors.isDark ? 'text-slate-100' : 'text-slate-700';
-  }, [preClose, colors.isDark]);
+  }, [preClose, colors.isDark, cc.upClass, cc.downClass]);
 
   const formatChangePercent = useCallback((price: number) => {
     if (preClose <= 0) return '0.00%';
@@ -443,8 +445,8 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
               <span>时间: <span className={colors.isDark ? 'text-slate-300' : 'text-slate-600'}>{displayData ? formatTimeDisplay(displayData.time) : '--'}</span></span>
               <span>收: <span className="text-accent-2">{displayData?.close?.toFixed(2)}</span></span>
               <span>开: {displayData?.open?.toFixed(2)}</span>
-              <span>高: <span className="text-red-400">{displayData?.high?.toFixed(2)}</span></span>
-              <span>低: <span className="text-green-400">{displayData?.low?.toFixed(2)}</span></span>
+              <span>高: <span className={cc.upClass}>{displayData?.high?.toFixed(2)}</span></span>
+              <span>低: <span className={cc.downClass}>{displayData?.low?.toFixed(2)}</span></span>
               {displayData?.ma5 && (
                 <>
                   <span>MA5: <span className="text-yellow-500">{displayData?.ma5?.toFixed(2)}</span></span>
@@ -461,8 +463,8 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
       {isIntraday && (
         <div className={`flex items-center justify-between px-3 py-1.5 border-b fin-divider text-xs ${colors.isDark ? 'bg-slate-900/30' : 'bg-slate-100/50'}`}>
           <div className="flex gap-4">
-            <span className={colors.isDark ? 'text-slate-500' : 'text-slate-400'}>最高: <span className="text-red-500">{todayHigh.toFixed(2)}</span></span>
-            <span className={colors.isDark ? 'text-slate-500' : 'text-slate-400'}>最低: <span className="text-green-500">{todayLow.toFixed(2)}</span></span>
+            <span className={colors.isDark ? 'text-slate-500' : 'text-slate-400'}>最高: <span className={cc.upClass}>{todayHigh.toFixed(2)}</span></span>
+            <span className={colors.isDark ? 'text-slate-500' : 'text-slate-400'}>最低: <span className={cc.downClass}>{todayLow.toFixed(2)}</span></span>
             <span className={colors.isDark ? 'text-slate-500' : 'text-slate-400'}>昨收: <span className={colors.isDark ? 'text-slate-300' : 'text-slate-600'}>{preClose.toFixed(2)}</span></span>
           </div>
           <div className="flex gap-4">

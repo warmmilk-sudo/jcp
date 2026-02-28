@@ -10,6 +10,7 @@ import { LongHuBangDialog } from './components/LongHuBangDialog';
 import { WelcomePage } from './components/WelcomePage';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useTheme } from './contexts/ThemeContext';
+import { useCandleColor } from './contexts/CandleColorContext';
 import { ResizeHandle } from './components/ResizeHandle';
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from './services/watchlistService';
 import { getKLineData, getOrderBook } from './services/stockService';
@@ -42,6 +43,7 @@ const LAYOUT_MAX = {
 
 const App: React.FC = () => {
   const { colors } = useTheme();
+  const cc = useCandleColor();
   const [watchlist, setWatchlist] = useState<Stock[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<string>('');
   const [currentSession, setCurrentSession] = useState<StockSession | null>(null);
@@ -509,7 +511,7 @@ const App: React.FC = () => {
                       const profitPercent = costAmount > 0 ? (profitLoss / costAmount) * 100 : 0;
                       const isProfit = profitLoss >= 0;
                       return (
-                        <span className={isProfit ? 'text-red-500' : 'text-green-500'}>
+                        <span className={isProfit ? cc.upClass : cc.downClass}>
                           {pos.shares}股 {isProfit ? '+' : ''}{profitLoss.toFixed(0)} ({isProfit ? '+' : ''}{profitPercent.toFixed(2)}%)
                         </span>
                       );
@@ -519,16 +521,16 @@ const App: React.FC = () => {
                   )}
                 </button>
               </div>
-              <div className={`text-3xl font-mono font-bold ${selectedStock.change >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+              <div className={`text-3xl font-mono font-bold ${cc.getColorClass(selectedStock.change >= 0)}`}>
                 {selectedStock.price.toFixed(2)}
               </div>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 text-sm">
-                <span className={`font-mono ${selectedStock.change >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                <span className={`font-mono ${cc.getColorClass(selectedStock.change >= 0)}`}>
                   {selectedStock.change >= 0 ? '+' : ''}{selectedStock.change.toFixed(2)}
                 </span>
-                <span className={`font-mono ${selectedStock.change >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                <span className={`font-mono ${cc.getColorClass(selectedStock.change >= 0)}`}>
                   {selectedStock.change >= 0 ? '+' : ''}{selectedStock.changePercent.toFixed(2)}%
                 </span>
               </div>
@@ -616,12 +618,13 @@ interface AStockStatItemProps {
 }
 
 const AStockStatItem: React.FC<AStockStatItemProps> = ({ label, value, preClose, isPlain, isDark = true }) => {
+  const cc = useCandleColor();
   let colorClass = isDark ? 'text-slate-100' : 'text-slate-700';
   let displayValue = typeof value === 'string' ? value : value.toFixed(2);
 
   if (!isPlain && typeof value === 'number' && preClose) {
-    if (value > preClose) colorClass = 'text-red-500';
-    else if (value < preClose) colorClass = 'text-green-500';
+    if (value > preClose) colorClass = cc.upClass;
+    else if (value < preClose) colorClass = cc.downClass;
   }
 
   return (
