@@ -191,7 +191,9 @@ func (r *ResponsesModel) processResponsesStream(body io.Reader, yield func(*mode
 
 		switch currentEventType {
 		case "response.output_text.delta":
-			r.handleTextDelta(data, thinkParser, &textContent, &thoughtContent, yield)
+			if !r.handleTextDelta(data, thinkParser, &textContent, &thoughtContent, yield) {
+				return
+			}
 		case "response.function_call_arguments.delta":
 			r.handleFuncArgsDelta(data, toolCallsMap)
 		case "response.output_item.added":
@@ -212,7 +214,9 @@ func (r *ResponsesModel) processResponsesStream(body io.Reader, yield func(*mode
 	}
 
 	// 刷新剩余分片（处理标签跨 chunk）
-	r.emitTextSegments(thinkParser.Flush(), &textContent, &thoughtContent, yield)
+	if !r.emitTextSegments(thinkParser.Flush(), &textContent, &thoughtContent, yield) {
+		return
+	}
 
 	// 组装最终文本，并解析第三方工具调用标记
 	if textContent != "" {
@@ -275,13 +279,13 @@ func (r *ResponsesModel) handleTextDelta(
 	textContent *string,
 	thoughtContent *string,
 	yield func(*model.LLMResponse, error) bool,
-) {
+) bool {
 	var delta ResponsesTextDelta
 	if err := json.Unmarshal([]byte(data), &delta); err != nil {
 		respLog.Warn("解析文本增量失败: %v", err)
-		return
+		return true
 	}
-	r.emitTextSegments(thinkParser.Feed(delta.Delta), textContent, thoughtContent, yield)
+	return r.emitTextSegments(thinkParser.Feed(delta.Delta), textContent, thoughtContent, yield)
 }
 
 func (r *ResponsesModel) emitTextSegments(
@@ -289,7 +293,7 @@ func (r *ResponsesModel) emitTextSegments(
 	textContent *string,
 	thoughtContent *string,
 	yield func(*model.LLMResponse, error) bool,
-) {
+) bool {
 	for _, seg := range segments {
 		if seg.Text == "" {
 			continue
@@ -305,8 +309,11 @@ func (r *ResponsesModel) emitTextSegments(
 			Partial:      true,
 			TurnComplete: false,
 		}
-		yield(llmResp, nil)
+		if !yield(llmResp, nil) {
+			return false
+		}
 	}
+	return true
 }
 
 // handleFuncArgsDelta 处理函数调用参数增量事件
