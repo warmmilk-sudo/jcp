@@ -1,17 +1,20 @@
 package adk
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/auth"
 	"cloud.google.com/go/auth/credentials"
 	"cloud.google.com/go/auth/httptransport"
+	"github.com/run-bigpig/jcp/internal/adk/anthropic"
 	"github.com/run-bigpig/jcp/internal/adk/openai"
 	"github.com/run-bigpig/jcp/internal/models"
 	"github.com/run-bigpig/jcp/internal/pkg/proxy"
@@ -45,6 +48,8 @@ func (f *ModelFactory) CreateModel(ctx context.Context, config *models.AIConfig)
 			return f.createOpenAIResponsesModel(config)
 		}
 		return f.createOpenAIModel(config)
+	case models.AIProviderAnthropic:
+		return f.createAnthropicModel(config)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", config.Provider)
 	}
@@ -144,6 +149,25 @@ func (f *ModelFactory) createOpenAIModel(config *models.AIConfig) (model.LLM, er
 	return openai.NewOpenAIModel(config.ModelName, openaiCfg, config.NoSystemRole), nil
 }
 
+// normalizeAnthropicBaseURL 规范化 Anthropic BaseURL
+func normalizeAnthropicBaseURL(baseURL string) string {
+	if baseURL == "" {
+		return "https://api.anthropic.com"
+	}
+	baseURL = strings.TrimSpace(strings.TrimRight(baseURL, "/"))
+	baseURL = strings.TrimSuffix(baseURL, "/v1")
+	return baseURL
+}
+
+// createAnthropicModel 创建 Anthropic 模型
+func (f *ModelFactory) createAnthropicModel(config *models.AIConfig) (model.LLM, error) {
+	baseURL := normalizeAnthropicBaseURL(config.BaseURL)
+	httpClient := &http.Client{
+		Transport: proxy.GetManager().GetTransport(),
+	}
+	return anthropic.NewAnthropicModel(config.ModelName, config.APIKey, baseURL, httpClient), nil
+}
+
 // createOpenAIResponsesModel 创建使用 Responses API 的 OpenAI 模型
 func (f *ModelFactory) createOpenAIResponsesModel(config *models.AIConfig) (model.LLM, error) {
 	baseURL := normalizeOpenAIBaseURL(config.BaseURL)
@@ -168,6 +192,8 @@ func (f *ModelFactory) TestConnection(ctx context.Context, config *models.AIConf
 		return f.testGeminiConnection(ctx, config)
 	case models.AIProviderVertexAI:
 		return f.testVertexAIConnection(ctx, config)
+	case models.AIProviderAnthropic:
+		return f.testAnthropicConnection(ctx, config)
 	default:
 		return fmt.Errorf("不支持的 provider: %s", config.Provider)
 	}
@@ -181,7 +207,7 @@ const systemRoleProbeKeyword = "SYS_PROBE_7X3K"
 // 返回 true 表示不支持（需要降级）
 func (f *ModelFactory) DetectSystemRoleSupport(ctx context.Context, config *models.AIConfig) bool {
 	if config.Provider != models.AIProviderOpenAI {
-		return false // Gemini/VertexAI 原生支持
+		return false // Gemini/VertexAI/Anthropic 原生支持
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -315,6 +341,49 @@ func (f *ModelFactory) testVertexAIConnection(ctx context.Context, config *model
 	}
 
 	return f.testViaGenerate(ctx, llm)
+}
+
+// testAnthropicConnection 测试 Anthropic 连通性
+func (f *ModelFactory) testAnthropicConnection(ctx context.Context, config *models.AIConfig) error {
+	baseURL := normalizeAnthropicBaseURL(config.BaseURL)
+	transport := proxy.GetManager().GetTransport()
+
+	body := map[string]any{
+		"model":      config.ModelName,
+		"max_tokens": 1,
+		"messages":   []map[string]string{{"role": "user", "content": "hi"}},
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("请求构造失败: %w", err)
+	}
+
+	endpoint, err := url.JoinPath(baseURL, "v1", "messages")
+	if err != nil {
+		return fmt.Errorf("无效 BaseURL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(jsonBody))
+	if err != nil {
+		return fmt.Errorf("请求创建失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", config.APIKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	client := &http.Client{Transport: transport}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("连接失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 }
 
 // testViaGenerate 通过 GenerateContent 发送最小请求测试连通性
