@@ -19,6 +19,16 @@ import {
 import { KLineData, TimePeriod, Stock } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCandleColor } from '../contexts/CandleColorContext';
+import { useIndicator } from '../contexts/IndicatorContext';
+import {
+  parseTime,
+  calculateSMA,
+  calculateEMA,
+  calculateBOLL,
+  calculateMACD,
+  calculateRSI,
+  calculateKDJ,
+} from '../utils/indicators';
 
 interface StockChartProps {
   data: KLineData[];
@@ -27,32 +37,20 @@ interface StockChartProps {
   stock?: Stock;
 }
 
-// 计算简单移动平均线
-function calculateMA(data: KLineData[], period: number): LineData[] {
-  const result: LineData[] = [];
-  for (let i = period - 1; i < data.length; i++) {
-    let sum = 0;
-    for (let j = 0; j < period; j++) {
-      sum += data[i - j].close;
-    }
-    result.push({
-      time: parseTime(data[i].time),
-      value: sum / period,
-    });
-  }
-  return result;
-}
+// 副图类型
+type SubChartType = 'volume' | 'macd' | 'rsi' | 'kdj';
 
-// 解析时间字符串为 lightweight-charts 时间格式
-function parseTime(timeStr: string): Time {
-  if (timeStr.length > 10) {
-    const [datePart, timePart] = timeStr.split(' ');
-    const [year, month, day] = datePart.split('-').map(Number);
-    const [hour, minute, second] = timePart.split(':').map(Number);
-    const utcTimestamp = Date.UTC(year, month - 1, day, hour, minute, second || 0);
-    return Math.floor(utcTimestamp / 1000) as Time;
+// 指标线颜色常量
+const MA_COLORS = ['#facc15', '#a855f7', '#f97316', '#38bdf8', '#f43f5e'];
+const EMA_COLORS = ['#06b6d4', '#ec4899'];
+const BOLL_COLOR = '#e91e63';
+
+// 批量移除 series 并清空 ref
+function clearSeriesArray(chart: IChartApi, refs: React.MutableRefObject<ISeriesApi<SeriesType, Time>[]>) {
+  for (const s of refs.current) {
+    try { chart.removeSeries(s); } catch { /* already removed */ }
   }
-  return timeStr as Time;
+  refs.current = [];
 }
 
 // 将 UTC 秒级时间戳格式化为 YYYY-MM-DD HH:mm
@@ -77,6 +75,7 @@ function formatTimeDisplay(timeStr: string): string {
 export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriodChange, stock }) => {
   const { colors } = useTheme();
   const cc = useCandleColor();
+  const { config: indicatorConfig, updateIndicator } = useIndicator();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const volumeContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -84,7 +83,24 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
   const mainSeriesRef = useRef<ISeriesApi<SeriesType, Time> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<SeriesType, Time> | null>(null);
   const maSeriesRefs = useRef<ISeriesApi<SeriesType, Time>[]>([]);
+  const emaSeriesRefs = useRef<ISeriesApi<SeriesType, Time>[]>([]);
+  const bollSeriesRefs = useRef<ISeriesApi<SeriesType, Time>[]>([]);
+  const subSeriesRefs = useRef<ISeriesApi<SeriesType, Time>[]>([]);
   const seriesTypeRef = useRef<'line' | 'candle' | null>(null);
+
+  // series → 指标类型映射（用于点击识别）
+  type MainIndicatorType = 'ma' | 'ema' | 'boll';
+  const seriesIndicatorMap = useRef<Map<ISeriesApi<SeriesType, Time>, MainIndicatorType>>(new Map());
+
+  // 浮动配置面板状态
+  const [indicatorPopup, setIndicatorPopup] = React.useState<{
+    type: MainIndicatorType;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [subChartType, setSubChartType] = React.useState<SubChartType>('volume');
+  const subChartTypeRef = useRef<SubChartType>('volume');
 
   const safeData = data || [];
   const isIntraday = period === '1m';
@@ -141,10 +157,10 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
       try { chart.removeSeries(mainSeriesRef.current); } catch { /* already removed */ }
       mainSeriesRef.current = null;
     }
-    for (const s of maSeriesRefs.current) {
-      try { chart.removeSeries(s); } catch { /* already removed */ }
-    }
-    maSeriesRefs.current = [];
+    clearSeriesArray(chart, maSeriesRefs);
+    clearSeriesArray(chart, emaSeriesRefs);
+    clearSeriesArray(chart, bollSeriesRefs);
+    clearSeriesArray(volumeChart, subSeriesRefs);
     if (volumeSeriesRef.current) {
       try { volumeChart.removeSeries(volumeSeriesRef.current); } catch { /* already removed */ }
       volumeSeriesRef.current = null;
@@ -211,6 +227,9 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
       mainSeriesRef.current = null;
       volumeSeriesRef.current = null;
       maSeriesRefs.current = [];
+      emaSeriesRefs.current = [];
+      bollSeriesRefs.current = [];
+      subSeriesRefs.current = [];
       seriesTypeRef.current = null;
     };
   }, []); // 空依赖 —— 只执行一次
@@ -240,8 +259,8 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
       });
     }
 
-    // 更新成交量柱颜色
-    if (volumeSeriesRef.current && safeData.length > 0) {
+    // 更新成交量柱颜色（仅副图为成交量时）
+    if (volumeSeriesRef.current && subChartTypeRef.current === 'volume' && safeData.length > 0) {
       const volData: HistogramData[] = safeData.map(d => ({
         time: parseTime(d.time),
         value: d.volume,
@@ -268,6 +287,83 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
       handleScale: !isIntraday,
     });
   }, [isIntraday]);
+
+  // 分时模式固定显示成交量副图，避免隐藏 tab 后无法恢复
+  useEffect(() => {
+    if (!isIntraday) return;
+    if (subChartTypeRef.current === 'volume') return;
+    setSubChartType('volume');
+    subChartTypeRef.current = 'volume';
+  }, [isIntraday]);
+
+  // ========== 副图辅助函数 ==========
+  const clearSubChart = useCallback(() => {
+    const volumeChart = volumeChartRef.current;
+    if (!volumeChart) return;
+    clearSeriesArray(volumeChart, subSeriesRefs);
+    if (volumeSeriesRef.current) {
+      try { volumeChart.removeSeries(volumeSeriesRef.current); } catch { /* already removed */ }
+      volumeSeriesRef.current = null;
+    }
+  }, []);
+
+  const renderSubChart = useCallback((type: SubChartType, chartData: KLineData[]) => {
+    const volumeChart = volumeChartRef.current;
+    if (!volumeChart || chartData.length === 0) return;
+
+    if (type === 'volume') {
+      volumeSeriesRef.current = volumeChart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' } });
+      const volData: HistogramData[] = chartData.map(d => ({
+        time: parseTime(d.time), value: d.volume,
+        color: d.close >= d.open ? chartColors.upColor + '99' : chartColors.downColor + '99',
+      }));
+      volumeSeriesRef.current.setData(volData);
+    } else if (type === 'macd') {
+      const { dif, dea, histogram } = calculateMACD(
+        chartData, indicatorConfig.macd.fast, indicatorConfig.macd.slow, indicatorConfig.macd.signal,
+      );
+      const difSeries = volumeChart.addSeries(LineSeries, {
+        color: '#3b82f6', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'DIF',
+      });
+      difSeries.setData(dif);
+      const deaSeries = volumeChart.addSeries(LineSeries, {
+        color: '#eab308', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'DEA',
+      });
+      deaSeries.setData(dea);
+      const histSeries = volumeChart.addSeries(HistogramSeries, {
+        priceLineVisible: false, lastValueVisible: true, title: 'MACD',
+      });
+      histSeries.setData(histogram as any);
+      subSeriesRefs.current = [difSeries, deaSeries, histSeries];
+    } else if (type === 'rsi') {
+      const rsiData = calculateRSI(chartData, indicatorConfig.rsi.period);
+      const rsiSeries = volumeChart.addSeries(LineSeries, {
+        color: '#a855f7', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'RSI',
+      });
+      rsiSeries.setData(rsiData);
+      // 70/30 参考线
+      rsiSeries.createPriceLine({ price: 70, color: '#ef444480', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' });
+      rsiSeries.createPriceLine({ price: 30, color: '#22c55e80', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' });
+      subSeriesRefs.current = [rsiSeries];
+    } else if (type === 'kdj') {
+      const { k, d, j } = calculateKDJ(
+        chartData, indicatorConfig.kdj.period, indicatorConfig.kdj.k, indicatorConfig.kdj.d,
+      );
+      const kSeries = volumeChart.addSeries(LineSeries, {
+        color: '#3b82f6', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'K',
+      });
+      kSeries.setData(k);
+      const dSeries = volumeChart.addSeries(LineSeries, {
+        color: '#eab308', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'D',
+      });
+      dSeries.setData(d);
+      const jSeries = volumeChart.addSeries(LineSeries, {
+        color: '#a855f7', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'J',
+      });
+      jSeries.setData(j);
+      subSeriesRefs.current = [kSeries, dSeries, jSeries];
+    }
+  }, [chartColors, indicatorConfig]);
 
   // ========== 核心：数据更新（切换股票/周期 = 全量，增量推送 = setData） ==========
   useEffect(() => {
@@ -333,49 +429,127 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
         });
         mainSeriesRef.current = candleSeries;
         seriesTypeRef.current = 'candle';
-
-        // 均线
-        const maColors = ['#facc15', '#a855f7', '#f97316'];
-        maColors.forEach(color => {
-          const maSeries = chart.addSeries(LineSeries, {
-            color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
-          });
-          maSeriesRefs.current.push(maSeries);
-        });
-
-        // 成交量
-        volumeSeriesRef.current = volumeChart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' } });
       }
 
-      // 更新数据
+      // 更新 K线 数据
       const candleData: CandlestickData[] = safeData.map(d => ({
         time: parseTime(d.time), open: d.open, high: d.high, low: d.low, close: d.close,
       }));
       mainSeriesRef.current.setData(candleData);
 
-      const maPeriods = [5, 10, 20];
-      maSeriesRefs.current.forEach((maSeries, idx) => {
-        const p = maPeriods[idx];
-        if (safeData.length >= p) {
-          maSeries.setData(calculateMA(safeData, p));
-        } else {
-          maSeries.setData([]);
-        }
-      });
+      // --- MA 均线（配置驱动） ---
+      for (const s of maSeriesRefs.current) seriesIndicatorMap.current.delete(s);
+      clearSeriesArray(chart, maSeriesRefs);
+      if (indicatorConfig.ma.enabled) {
+        indicatorConfig.ma.periods.forEach((p, idx) => {
+          const maSeries = chart.addSeries(LineSeries, {
+            color: MA_COLORS[idx % MA_COLORS.length], lineWidth: 1,
+            priceLineVisible: false, lastValueVisible: true, title: `MA${p}`,
+          });
+          maSeries.setData(safeData.length >= p ? calculateSMA(safeData, p) : []);
+          maSeriesRefs.current.push(maSeries);
+          seriesIndicatorMap.current.set(maSeries, 'ma');
+        });
+      }
+
+      // --- EMA 均线 ---
+      for (const s of emaSeriesRefs.current) seriesIndicatorMap.current.delete(s);
+      clearSeriesArray(chart, emaSeriesRefs);
+      if (indicatorConfig.ema.enabled) {
+        indicatorConfig.ema.periods.forEach((p, idx) => {
+          const emaSeries = chart.addSeries(LineSeries, {
+            color: EMA_COLORS[idx % EMA_COLORS.length], lineWidth: 1,
+            priceLineVisible: false, lastValueVisible: true, title: `EMA${p}`,
+          });
+          emaSeries.setData(calculateEMA(safeData, p));
+          emaSeriesRefs.current.push(emaSeries);
+          seriesIndicatorMap.current.set(emaSeries, 'ema');
+        });
+      }
+
+      // --- BOLL 布林带 ---
+      for (const s of bollSeriesRefs.current) seriesIndicatorMap.current.delete(s);
+      clearSeriesArray(chart, bollSeriesRefs);
+      if (indicatorConfig.boll.enabled) {
+        const { mid, upper, lower } = calculateBOLL(safeData, indicatorConfig.boll.period, indicatorConfig.boll.multiplier);
+        const midSeries = chart.addSeries(LineSeries, {
+          color: BOLL_COLOR, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'BOLL:M',
+        });
+        midSeries.setData(mid);
+        const upperSeries = chart.addSeries(LineSeries, {
+          color: BOLL_COLOR, lineWidth: 1, lineStyle: LineStyle.Dashed,
+          priceLineVisible: false, lastValueVisible: true, title: 'BOLL:U',
+        });
+        upperSeries.setData(upper);
+        const lowerSeries = chart.addSeries(LineSeries, {
+          color: BOLL_COLOR, lineWidth: 1, lineStyle: LineStyle.Dashed,
+          priceLineVisible: false, lastValueVisible: true, title: 'BOLL:L',
+        });
+        lowerSeries.setData(lower);
+        bollSeriesRefs.current = [midSeries, upperSeries, lowerSeries];
+        for (const s of bollSeriesRefs.current) seriesIndicatorMap.current.set(s, 'boll');
+      }
     }
 
-    // 更新成交量数据
-    if (volumeSeriesRef.current) {
-      const volumeData: HistogramData[] = safeData.map(d => ({
-        time: parseTime(d.time), value: d.volume,
-        color: d.close >= d.open ? chartColors.upColor + '99' : chartColors.downColor + '99',
-      }));
-      volumeSeriesRef.current.setData(volumeData);
-    }
+    // ========== 副图渲染 ==========
+    clearSubChart();
+    const subChartTypeToRender: SubChartType = isIntraday ? 'volume' : subChartTypeRef.current;
+    renderSubChart(subChartTypeToRender, safeData);
 
     chart.timeScale().fitContent();
     volumeChart.timeScale().fitContent();
-  }, [safeData, preClose, isIntraday, chartColors, clearAllSeries]);
+  }, [safeData, preClose, isIntraday, chartColors, clearAllSeries, clearSubChart, renderSubChart, indicatorConfig]);
+
+  // ========== 副图指标禁用时自动回退到成交量 ==========
+  useEffect(() => {
+    const cur = subChartTypeRef.current;
+    const shouldFallback =
+      (cur === 'macd' && !indicatorConfig.macd.enabled) ||
+      (cur === 'rsi' && !indicatorConfig.rsi.enabled) ||
+      (cur === 'kdj' && !indicatorConfig.kdj.enabled);
+    if (shouldFallback) {
+      setSubChartType('volume');
+      subChartTypeRef.current = 'volume';
+      clearSubChart();
+      renderSubChart('volume', safeData);
+      volumeChartRef.current?.timeScale().fitContent();
+    }
+  }, [indicatorConfig.macd.enabled, indicatorConfig.rsi.enabled, indicatorConfig.kdj.enabled, clearSubChart, renderSubChart, safeData]);
+
+  // ========== 副图切换 ==========
+  const handleSubChartSwitch = useCallback((type: SubChartType) => {
+    setSubChartType(type);
+    subChartTypeRef.current = type;
+    clearSubChart();
+    renderSubChart(type, safeData);
+    volumeChartRef.current?.timeScale().fitContent();
+  }, [clearSubChart, renderSubChart, safeData]);
+
+  // ========== 点击指标线弹出配置面板 ==========
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const clickHandler = (param: MouseEventParams<Time>) => {
+      if (!param.seriesData || !param.point) {
+        setIndicatorPopup(null);
+        return;
+      }
+      // 遍历点击到的 series，查找是否命中指标线
+      for (const [series] of param.seriesData) {
+        const indType = seriesIndicatorMap.current.get(series as ISeriesApi<SeriesType, Time>);
+        if (indType) {
+          setIndicatorPopup({ type: indType, x: param.point.x, y: param.point.y });
+          return;
+        }
+      }
+      // 未命中指标线，关闭面板
+      setIndicatorPopup(null);
+    };
+
+    chart.subscribeClick(clickHandler);
+    return () => chart.unsubscribeClick(clickHandler);
+  }, []);
 
   // ========== 十字光标 ==========
   useEffect(() => {
@@ -409,7 +583,7 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
   const hasData = safeData.length > 0;
 
   return (
-    <div className="h-full w-full fin-panel flex flex-col relative">
+    <div className="h-full w-full fin-panel flex flex-col relative" onClick={() => setIndicatorPopup(null)}>
       {/* 加载提示（叠加在图表上方） */}
       {!hasData && (
         <div className="absolute inset-0 z-20 flex items-center justify-center fin-panel">
@@ -495,10 +669,131 @@ export const StockChartLW: React.FC<StockChartProps> = ({ data, period, onPeriod
       )}
 
       {/* 主图表区域 */}
-      <div className="flex-1 min-h-0" ref={chartContainerRef} />
+      <div className="flex-1 min-h-0 relative">
+        <div className="absolute inset-0" ref={chartContainerRef} />
 
-      {/* 成交量图表区域 */}
-      <div className={`${isIntraday ? 'h-20' : 'h-16'} border-t fin-divider`} ref={volumeContainerRef} />
+        {/* 指标快捷配置浮动面板 */}
+        {indicatorPopup && (
+          <div
+            className={`absolute z-30 rounded shadow-lg border text-xs p-2 min-w-[180px] ${
+              colors.isDark
+                ? 'bg-slate-800 border-slate-700 text-slate-200'
+                : 'bg-white border-slate-300 text-slate-700'
+            }`}
+            style={{
+              left: Math.min(indicatorPopup.x, (chartContainerRef.current?.clientWidth || 300) - 200),
+              top: Math.min(indicatorPopup.y, (chartContainerRef.current?.clientHeight || 200) - 120),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* MA / EMA 配置（共用结构） */}
+            {(indicatorPopup.type === 'ma' || indicatorPopup.type === 'ema') && (() => {
+              const key = indicatorPopup.type;
+              const label = key === 'ma' ? 'MA 均线' : 'EMA 指数均线';
+              const cfg = indicatorConfig[key];
+              return (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold">{label}</span>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={cfg.enabled}
+                        onChange={(e) => updateIndicator(key, { enabled: e.target.checked })}
+                        className="accent-blue-500"
+                      />
+                      <span className="text-[10px]">显示</span>
+                    </label>
+                  </div>
+                  <div>
+                    <span className={`text-[10px] ${colors.isDark ? 'text-slate-400' : 'text-slate-500'}`}>周期（逗号分隔）</span>
+                    <input
+                      className={`w-full mt-0.5 px-1.5 py-0.5 rounded text-xs border ${
+                        colors.isDark ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-300'
+                      }`}
+                      value={cfg.periods.join(',')}
+                      onChange={(e) => {
+                        const periods = e.target.value.split(',').map(Number).filter(n => n > 0);
+                        if (periods.length > 0) updateIndicator(key, { periods });
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* BOLL 配置 */}
+            {indicatorPopup.type === 'boll' && (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold">BOLL 布林带</span>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={indicatorConfig.boll.enabled}
+                      onChange={(e) => updateIndicator('boll', { enabled: e.target.checked })}
+                      className="accent-blue-500"
+                    />
+                    <span className="text-[10px]">显示</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <span className={`text-[10px] ${colors.isDark ? 'text-slate-400' : 'text-slate-500'}`}>周期</span>
+                    <input
+                      type="number"
+                      className={`w-full mt-0.5 px-1.5 py-0.5 rounded text-xs border ${
+                        colors.isDark ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-300'
+                      }`}
+                      value={indicatorConfig.boll.period}
+                      onChange={(e) => updateIndicator('boll', { period: Number(e.target.value) || 20 })}
+                    />
+                  </div>
+                  <div>
+                    <span className={`text-[10px] ${colors.isDark ? 'text-slate-400' : 'text-slate-500'}`}>倍数</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      className={`w-full mt-0.5 px-1.5 py-0.5 rounded text-xs border ${
+                        colors.isDark ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-300'
+                      }`}
+                      value={indicatorConfig.boll.multiplier}
+                      onChange={(e) => updateIndicator('boll', { multiplier: Number(e.target.value) || 2 })}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 副图切换 tab（仅 K线模式） */}
+      {!isIntraday && hasData && (
+        <div className={`flex items-center gap-1 px-2 py-0.5 border-t fin-divider ${colors.isDark ? 'bg-slate-900/50' : 'bg-slate-50'}`}>
+          {([
+            { id: 'volume' as SubChartType, label: '成交量' },
+            ...(indicatorConfig.macd.enabled ? [{ id: 'macd' as SubChartType, label: 'MACD' }] : []),
+            ...(indicatorConfig.rsi.enabled ? [{ id: 'rsi' as SubChartType, label: 'RSI' }] : []),
+            ...(indicatorConfig.kdj.enabled ? [{ id: 'kdj' as SubChartType, label: 'KDJ' }] : []),
+          ]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => handleSubChartSwitch(tab.id)}
+              className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+                subChartType === tab.id
+                  ? 'text-accent-2 font-bold ' + (colors.isDark ? 'bg-slate-800/80' : 'bg-slate-200/80')
+                  : (colors.isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600')
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 副图区域 */}
+      <div className={`${isIntraday ? 'h-20' : 'h-24'} border-t fin-divider`} ref={volumeContainerRef} />
     </div>
   );
 };

@@ -300,6 +300,140 @@ export namespace models {
 	        this.aiConfigId = source["aiConfigId"];
 	    }
 	}
+	export class KDJConfig {
+	    enabled: boolean;
+	    period: number;
+	    k: number;
+	    d: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new KDJConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.period = source["period"];
+	        this.k = source["k"];
+	        this.d = source["d"];
+	    }
+	}
+	export class RSIConfig {
+	    enabled: boolean;
+	    period: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RSIConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.period = source["period"];
+	    }
+	}
+	export class MACDConfig {
+	    enabled: boolean;
+	    fast: number;
+	    slow: number;
+	    signal: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MACDConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.fast = source["fast"];
+	        this.slow = source["slow"];
+	        this.signal = source["signal"];
+	    }
+	}
+	export class BOLLConfig {
+	    enabled: boolean;
+	    period: number;
+	    multiplier: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BOLLConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.period = source["period"];
+	        this.multiplier = source["multiplier"];
+	    }
+	}
+	export class EMAConfig {
+	    enabled: boolean;
+	    periods: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new EMAConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.periods = source["periods"];
+	    }
+	}
+	export class MAConfig {
+	    enabled: boolean;
+	    periods: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MAConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.periods = source["periods"];
+	    }
+	}
+	export class IndicatorConfig {
+	    ma: MAConfig;
+	    ema: EMAConfig;
+	    boll: BOLLConfig;
+	    macd: MACDConfig;
+	    rsi: RSIConfig;
+	    kdj: KDJConfig;
+	
+	    static createFrom(source: any = {}) {
+	        return new IndicatorConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ma = this.convertValues(source["ma"], MAConfig);
+	        this.ema = this.convertValues(source["ema"], EMAConfig);
+	        this.boll = this.convertValues(source["boll"], BOLLConfig);
+	        this.macd = this.convertValues(source["macd"], MACDConfig);
+	        this.rsi = this.convertValues(source["rsi"], RSIConfig);
+	        this.kdj = this.convertValues(source["kdj"], KDJConfig);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class OpenClawConfig {
 	    enabled: boolean;
 	    port: number;
@@ -410,6 +544,7 @@ export namespace models {
 	    proxy: ProxyConfig;
 	    layout: LayoutConfig;
 	    openClaw: OpenClawConfig;
+	    indicators: IndicatorConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppConfig(source);
@@ -428,6 +563,7 @@ export namespace models {
 	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
 	        this.layout = this.convertValues(source["layout"], LayoutConfig);
 	        this.openClaw = this.convertValues(source["openClaw"], OpenClawConfig);
+	        this.indicators = this.convertValues(source["indicators"], IndicatorConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -448,6 +584,7 @@ export namespace models {
 		    return a;
 		}
 	}
+	
 	export class ChatMessage {
 	    id: string;
 	    agentId: string;
@@ -482,6 +619,9 @@ export namespace models {
 	        this.meetingMode = source["meetingMode"];
 	    }
 	}
+	
+	
+	
 	export class KLineData {
 	    time: string;
 	    open: number;
@@ -598,6 +738,8 @@ export namespace models {
 	
 	
 	
+	
+	
 	export class OrderBookItem {
 	    price: number;
 	    size: number;
@@ -648,6 +790,7 @@ export namespace models {
 		    return a;
 		}
 	}
+	
 	
 	
 	export class Stock {

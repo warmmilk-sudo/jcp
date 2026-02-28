@@ -66,6 +66,7 @@ type AppConfig struct {
 	Proxy           ProxyConfig       `json:"proxy"`         // 代理配置
 	Layout          LayoutConfig      `json:"layout"`        // 界面布局配置
 	OpenClaw        OpenClawConfig    `json:"openClaw"`      // OpenClaw 服务配置
+	Indicators      IndicatorConfig   `json:"indicators"`    // 技术指标配置
 }
 
 // ProxyMode 代理模式
@@ -107,4 +108,49 @@ type OpenClawConfig struct {
 	Enabled bool   `json:"enabled"` // 是否启用
 	Port    int    `json:"port"`    // 监听端口
 	APIKey  string `json:"apiKey"`  // API 鉴权密钥（可选）
+}
+
+// IndicatorConfig 技术指标配置
+type IndicatorConfig struct {
+	MA   MAConfig   `json:"ma"`
+	EMA  EMAConfig  `json:"ema"`
+	BOLL BOLLConfig `json:"boll"`
+	MACD MACDConfig `json:"macd"`
+	RSI  RSIConfig  `json:"rsi"`
+	KDJ  KDJConfig  `json:"kdj"`
+}
+
+type MAConfig struct {
+	Enabled bool  `json:"enabled"`
+	Periods []int `json:"periods"` // 默认 [5, 10, 20]
+}
+
+type EMAConfig struct {
+	Enabled bool  `json:"enabled"`
+	Periods []int `json:"periods"` // 默认 [12, 26]
+}
+
+type BOLLConfig struct {
+	Enabled    bool    `json:"enabled"`
+	Period     int     `json:"period"`     // 默认 20
+	Multiplier float64 `json:"multiplier"` // 默认 2.0
+}
+
+type MACDConfig struct {
+	Enabled bool `json:"enabled"`
+	Fast    int  `json:"fast"`   // 默认 12
+	Slow    int  `json:"slow"`   // 默认 26
+	Signal  int  `json:"signal"` // 默认 9
+}
+
+type RSIConfig struct {
+	Enabled bool `json:"enabled"`
+	Period  int  `json:"period"` // 默认 14
+}
+
+type KDJConfig struct {
+	Enabled bool `json:"enabled"`
+	Period  int  `json:"period"` // 默认 9
+	K       int  `json:"k"`      // 默认 3
+	D       int  `json:"d"`      // 默认 3
 }

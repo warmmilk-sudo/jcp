@@ -7,6 +7,7 @@ import { checkForUpdate, doUpdate, restartApp, getCurrentVersion, onUpdateProgre
 import { getStrategies, getActiveStrategyID, setActiveStrategy, deleteStrategy, generateStrategy, updateStrategy, enhancePrompt, Strategy, StrategyAgent } from '../services/strategyService';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCandleColor, CandleColorMode } from '../contexts/CandleColorContext';
+import { useIndicator, IndicatorConfig, IndicatorType, DEFAULT_INDICATORS } from '../contexts/IndicatorContext';
 
 interface AIConfig {
   id: string;
@@ -173,6 +174,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
     proxy: ProxyConfig;
     moderatorAiId: string;
     strategyAiId: string;
+    indicators: any;
   }>>({});
 
   // 实际执行保存的函数
@@ -207,6 +209,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
     moderatorAiId: string;
     strategyAiId: string;
     candleColorMode: string;
+    indicators: any;
   }>) => {
     // 合并待保存的更新
     pendingUpdatesRef.current = { ...pendingUpdatesRef.current, ...updates };
@@ -346,7 +349,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
               />
             )}
             {activeTab === 'chart' && (
-              <ChartColorSettings saveConfig={saveConfig} />
+              <ChartSettings saveConfig={saveConfig} />
             )}
             {activeTab === 'proxy' && (
               <ProxySettings
@@ -1470,18 +1473,48 @@ const MCPEditForm: React.FC<MCPEditFormProps> = ({ server, status, tools, onBack
   );
 };
 
-// ========== 图表颜色设置选项卡 ==========
-const ChartColorSettings: React.FC<{ saveConfig: (updates: { candleColorMode: string }) => void }> = ({ saveConfig }) => {
+// ========== 图表设置选项卡（涨跌颜色 + 技术指标） ==========
+const ChartSettings: React.FC<{ saveConfig: (updates: any) => void }> = ({ saveConfig }) => {
   const { colors } = useTheme();
   const { mode, setMode } = useCandleColor();
+  const { config: indConfig, updateIndicator, resetIndicator } = useIndicator();
 
-  const options: { value: CandleColorMode; label: string; upLabel: string; downLabel: string; upCls: string; downCls: string }[] = [
+  // 保存指标配置到后端
+  const saveIndicators = useCallback((newConfig: IndicatorConfig) => {
+    saveConfig({ indicators: newConfig });
+  }, [saveConfig]);
+
+  const handleToggle = useCallback(<T extends IndicatorType>(type: T, enabled: boolean) => {
+    updateIndicator(type, { enabled } as Partial<IndicatorConfig[T]>);
+    const updated = { ...indConfig, [type]: { ...indConfig[type], enabled } };
+    saveIndicators(updated);
+  }, [indConfig, updateIndicator, saveIndicators]);
+
+  const handleReset = useCallback((type: IndicatorType) => {
+    resetIndicator(type);
+    const updated = { ...indConfig, [type]: DEFAULT_INDICATORS[type] };
+    saveIndicators(updated);
+  }, [indConfig, resetIndicator, saveIndicators]);
+
+  const handleParamChange = useCallback(<T extends IndicatorType>(type: T, key: string, value: number | number[] | boolean) => {
+    updateIndicator(type, { [key]: value } as Partial<IndicatorConfig[T]>);
+    const updated = { ...indConfig, [type]: { ...indConfig[type], [key]: value } };
+    saveIndicators(updated);
+  }, [indConfig, updateIndicator, saveIndicators]);
+
+  const colorOptions: { value: CandleColorMode; label: string; upLabel: string; downLabel: string; upCls: string; downCls: string }[] = [
     { value: 'red-up', label: '红涨绿跌', upLabel: '涨', downLabel: '跌', upCls: 'text-red-500', downCls: 'text-green-500' },
     { value: 'green-up', label: '绿涨红跌', upLabel: '涨', downLabel: '跌', upCls: 'text-green-500', downCls: 'text-red-500' },
   ];
 
+  const inputCls = `w-full px-2 py-1 text-xs rounded border ${
+    colors.isDark ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-white border-slate-300 text-slate-700'
+  }`;
+  const labelCls = `text-xs ${colors.isDark ? 'text-slate-400' : 'text-slate-500'}`;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-y-auto max-h-[420px] pr-1">
+      {/* ===== 涨跌颜色 ===== */}
       <div>
         <h3 className={`font-medium ${colors.isDark ? 'text-white' : 'text-slate-800'}`}>涨跌颜色</h3>
         <p className={`text-xs mt-1 ${colors.isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -1489,7 +1522,7 @@ const ChartColorSettings: React.FC<{ saveConfig: (updates: { candleColorMode: st
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        {options.map(opt => (
+        {colorOptions.map(opt => (
           <button
             key={opt.value}
             onClick={() => {
@@ -1524,38 +1557,200 @@ const ChartColorSettings: React.FC<{ saveConfig: (updates: { candleColorMode: st
         ))}
       </div>
 
-      {/* K线预览 */}
+      {/* ===== 分隔线 ===== */}
+      <div className={`border-t ${colors.isDark ? 'border-slate-700' : 'border-slate-200'}`} />
+
+      {/* ===== 主图指标 ===== */}
       <div>
-        <h4 className={`text-sm font-medium mb-2 ${colors.isDark ? 'text-slate-300' : 'text-slate-600'}`}>预览效果</h4>
-        <div className={`rounded-lg p-4 flex items-end justify-center gap-2 h-32 ${colors.isDark ? 'bg-slate-900/60' : 'bg-slate-100'}`}>
-          {/* [top, bodyTop, bodyBottom, bottom, isUp] — 百分比定位 */}
-          {([
-            [61,56,36,31,true],[54,51,31,26,false],[66,58,41,34,true],[71,66,38,31,true],
-            [64,61,44,36,false],[56,51,34,28,false],[68,64,46,41,true],[74,71,51,44,true],
-            [66,62,48,42,false],[72,68,54,48,true],
-          ] as [number,number,number,number,boolean][]).map(([top,bTop,bBot,bot,isUp], i) => {
-            const bg = isUp
-              ? (mode === 'red-up' ? 'bg-red-500' : 'bg-green-500')
-              : (mode === 'red-up' ? 'bg-green-500' : 'bg-red-500');
-            return (
-              <div key={i} className="relative" style={{ width: 10, height: '100%' }}>
-                {/* 上影线 */}
-                <div className={`absolute left-1/2 -translate-x-1/2 w-px ${bg}`}
-                  style={{ bottom: `${bTop}%`, height: `${top - bTop}%` }} />
-                {/* 实体 */}
-                <div className={`absolute left-0 right-0 rounded-[1px] ${bg}`}
-                  style={{ bottom: `${bBot}%`, height: `${bTop - bBot}%` }} />
-                {/* 下影线 */}
-                <div className={`absolute left-1/2 -translate-x-1/2 w-px ${bg}`}
-                  style={{ bottom: `${bot}%`, height: `${bBot - bot}%` }} />
-              </div>
-            );
-          })}
-        </div>
+        <h3 className={`font-medium ${colors.isDark ? 'text-white' : 'text-slate-800'}`}>主图指标</h3>
+        <p className={`text-xs mt-1 mb-3 ${colors.isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          叠加在 K 线主图上的技术指标曲线
+        </p>
+
+        {/* MA 均线 */}
+        <IndicatorRow
+          label="MA 均线"
+          enabled={indConfig.ma.enabled}
+          onToggle={(v) => handleToggle('ma', v)}
+          onReset={() => handleReset('ma')}
+          colors={colors}
+        >
+          <div>
+            <span className={labelCls}>周期（逗号分隔）</span>
+            <input
+              className={inputCls}
+              value={(indConfig.ma.periods ?? []).join(',')}
+              onChange={(e) => {
+                const periods = e.target.value.split(',').map(Number).filter(n => n > 0);
+                if (periods.length > 0) handleParamChange('ma', 'periods', periods);
+              }}
+            />
+          </div>
+        </IndicatorRow>
+
+        {/* EMA 均线 */}
+        <IndicatorRow
+          label="EMA 指数均线"
+          enabled={indConfig.ema.enabled}
+          onToggle={(v) => handleToggle('ema', v)}
+          onReset={() => handleReset('ema')}
+          colors={colors}
+        >
+          <div>
+            <span className={labelCls}>周期（逗号分隔）</span>
+            <input
+              className={inputCls}
+              value={(indConfig.ema.periods ?? []).join(',')}
+              onChange={(e) => {
+                const periods = e.target.value.split(',').map(Number).filter(n => n > 0);
+                if (periods.length > 0) handleParamChange('ema', 'periods', periods);
+              }}
+            />
+          </div>
+        </IndicatorRow>
+
+        {/* BOLL 布林带 */}
+        <IndicatorRow
+          label="BOLL 布林带"
+          enabled={indConfig.boll.enabled}
+          onToggle={(v) => handleToggle('boll', v)}
+          onReset={() => handleReset('boll')}
+          colors={colors}
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className={labelCls}>周期</span>
+              <input type="number" className={inputCls} value={indConfig.boll.period}
+                onChange={(e) => handleParamChange('boll', 'period', Number(e.target.value) || 20)} />
+            </div>
+            <div>
+              <span className={labelCls}>倍数</span>
+              <input type="number" step="0.1" className={inputCls} value={indConfig.boll.multiplier}
+                onChange={(e) => handleParamChange('boll', 'multiplier', Number(e.target.value) || 2)} />
+            </div>
+          </div>
+        </IndicatorRow>
+      </div>
+
+      {/* ===== 分隔线 ===== */}
+      <div className={`border-t ${colors.isDark ? 'border-slate-700' : 'border-slate-200'}`} />
+
+      {/* ===== 副图指标 ===== */}
+      <div>
+        <h3 className={`font-medium ${colors.isDark ? 'text-white' : 'text-slate-800'}`}>副图指标</h3>
+        <p className={`text-xs mt-1 mb-3 ${colors.isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          在底部副图区域切换显示的技术指标
+        </p>
+
+        {/* MACD */}
+        <IndicatorRow
+          label="MACD"
+          enabled={indConfig.macd.enabled}
+          onToggle={(v) => handleToggle('macd', v)}
+          onReset={() => handleReset('macd')}
+          colors={colors}
+        >
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <span className={labelCls}>快线</span>
+              <input type="number" className={inputCls} value={indConfig.macd.fast}
+                onChange={(e) => handleParamChange('macd', 'fast', Number(e.target.value) || 12)} />
+            </div>
+            <div>
+              <span className={labelCls}>慢线</span>
+              <input type="number" className={inputCls} value={indConfig.macd.slow}
+                onChange={(e) => handleParamChange('macd', 'slow', Number(e.target.value) || 26)} />
+            </div>
+            <div>
+              <span className={labelCls}>信号</span>
+              <input type="number" className={inputCls} value={indConfig.macd.signal}
+                onChange={(e) => handleParamChange('macd', 'signal', Number(e.target.value) || 9)} />
+            </div>
+          </div>
+        </IndicatorRow>
+
+        {/* RSI */}
+        <IndicatorRow
+          label="RSI"
+          enabled={indConfig.rsi.enabled}
+          onToggle={(v) => handleToggle('rsi', v)}
+          onReset={() => handleReset('rsi')}
+          colors={colors}
+        >
+          <div>
+            <span className={labelCls}>周期</span>
+            <input type="number" className={inputCls} value={indConfig.rsi.period}
+              onChange={(e) => handleParamChange('rsi', 'period', Number(e.target.value) || 14)} />
+          </div>
+        </IndicatorRow>
+
+        {/* KDJ */}
+        <IndicatorRow
+          label="KDJ"
+          enabled={indConfig.kdj.enabled}
+          onToggle={(v) => handleToggle('kdj', v)}
+          onReset={() => handleReset('kdj')}
+          colors={colors}
+        >
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <span className={labelCls}>周期</span>
+              <input type="number" className={inputCls} value={indConfig.kdj.period}
+                onChange={(e) => handleParamChange('kdj', 'period', Number(e.target.value) || 9)} />
+            </div>
+            <div>
+              <span className={labelCls}>K</span>
+              <input type="number" className={inputCls} value={indConfig.kdj.k}
+                onChange={(e) => handleParamChange('kdj', 'k', Number(e.target.value) || 3)} />
+            </div>
+            <div>
+              <span className={labelCls}>D</span>
+              <input type="number" className={inputCls} value={indConfig.kdj.d}
+                onChange={(e) => handleParamChange('kdj', 'd', Number(e.target.value) || 3)} />
+            </div>
+          </div>
+        </IndicatorRow>
       </div>
     </div>
   );
 };
+
+// ========== 指标行组件 ==========
+const IndicatorRow: React.FC<{
+  label: string;
+  enabled: boolean;
+  onToggle: (v: boolean) => void;
+  onReset: () => void;
+  colors: any;
+  children: React.ReactNode;
+}> = ({ label, enabled, onToggle, onReset, colors, children }) => (
+  <div className={`rounded-lg p-3 mb-2 ${colors.isDark ? 'bg-slate-800/40' : 'bg-slate-50'}`}>
+    <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onToggle(!enabled)}
+          className={`w-8 h-4 rounded-full transition-colors relative ${
+            enabled ? 'bg-[var(--accent)]' : (colors.isDark ? 'bg-slate-600' : 'bg-slate-300')
+          }`}
+        >
+          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+            enabled ? 'left-[18px]' : 'left-0.5'
+          }`} />
+        </button>
+        <span className={`text-sm font-medium ${colors.isDark ? 'text-slate-200' : 'text-slate-700'}`}>{label}</span>
+      </div>
+      <button
+        onClick={onReset}
+        className={`text-[10px] px-1.5 py-0.5 rounded ${
+          colors.isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200'
+        }`}
+      >
+        重置
+      </button>
+    </div>
+    {enabled && <div className="mt-2">{children}</div>}
+  </div>
+);
 
 // ========== 代理设置选项卡 ==========
 interface ProxySettingsProps {
